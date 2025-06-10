@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EZ-Dash 심플 센서 대시보드</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .status {
+            background: rgba(255,255,255,0.1);
+            padding: 10px 20px;
+            border-radius: 25px;
+            display: inline-block;
+            color: white;
+            margin-bottom: 20px;
+        }
+
+        .sensors-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .sensor-card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .sensor-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 40px rgba(0,0,0,0.15);
+        }
+
+        .sensor-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: var(--sensor-color);
+        }
+
+        .sensor-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .sensor-icon {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: var(--sensor-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 1.5rem;
+            margin-right: 15px;
+        }
+
+        .sensor-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .sensor-value {
+            font-size: 3rem;
+            font-weight: 700;
+            color: var(--sensor-color);
+            margin-bottom: 10px;
+        }
+
+        .sensor-unit {
+            font-size: 1.2rem;
+            color: #666;
+            font-weight: normal;
+        }
+
+        .sensor-info {
+            font-size: 0.9rem;
+            color: #888;
+            border-top: 1px solid #eee;
+            padding-top: 15px;
+        }
+
+        /* 센서별 색상 */
+        .temperature {
+            --sensor-color: #ff6b6b;
+        }
+
+        .humidity {
+            --sensor-color: #4ecdc4;
+        }
+
+        .light {
+            --sensor-color: #ffe66d;
+        }
+
+        .pressure {
+            --sensor-color: #a8e6cf;
+        }
+
+        .vibration {
+            --sensor-color: #ff8b94;
+        }
+
+        .air-quality {
+            --sensor-color: #88d8b0;
+        }
+
+        .loading {
+            text-align: center;
+            color: #666;
+            font-style: italic;
+        }
+
+        .error {
+            background: #ffebee;
+            color: #c62828;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            text-align: center;
+        }
+
+        .footer {
+            text-align: center;
+            color: rgba(255,255,255,0.8);
+            margin-top: 40px;
+            font-size: 0.9rem;
+        }
+
+        @media (max-width: 768px) {
+            .sensors-grid {
+                grid-template-columns: 1fr;
+                gap: 15px;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .sensor-value {
+                font-size: 2.5rem;
+            }
+        }
+
+        /* 애니메이션 */
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
+
+        .updating {
+            animation: pulse 1s infinite;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1><i class="fas fa-chart-line"></i> EZ-Dash 센서 모니터</h1>
+        <div class="status" id="status">
+            <i class="fas fa-circle" id="status-icon"></i>
+            <span id="status-text">연결 중...</span>
+            <span id="last-update"></span>
+        </div>
+    </div>
+
+    <div class="sensors-grid" id="sensors-grid">
+        <!-- 온도 센서 -->
+        <div class="sensor-card temperature">
+            <div class="sensor-header">
+                <div class="sensor-icon">
+                    <i class="fas fa-thermometer-half"></i>
+                </div>
+                <div class="sensor-title">온도</div>
+            </div>
+            <div class="sensor-value">
+                <span id="temperature-value" class="loading">--</span>
+                <span class="sensor-unit">°C</span>
+            </div>
+            <div class="sensor-info" id="temperature-info">BME688 센서</div>
+        </div>
+
+        <!-- 습도 센서 -->
+        <div class="sensor-card humidity">
+            <div class="sensor-header">
+                <div class="sensor-icon">
+                    <i class="fas fa-tint"></i>
+                </div>
+                <div class="sensor-title">습도</div>
+            </div>
+            <div class="sensor-value">
+                <span id="humidity-value" class="loading">--</span>
+                <span class="sensor-unit">%</span>
+            </div>
+            <div class="sensor-info" id="humidity-info">BME688 센서</div>
+        </div>
+
+        <!-- 조도 센서 -->
+        <div class="sensor-card light">
+            <div class="sensor-header">
+                <div class="sensor-icon">
+                    <i class="fas fa-sun"></i>
+                </div>
+                <div class="sensor-title">조도</div>
+            </div>
+            <div class="sensor-value">
+                <span id="light-value" class="loading">--</span>
+                <span class="sensor-unit">lux</span>
+            </div>
+            <div class="sensor-info" id="light-info">BH1750 센서</div>
+        </div>
+
+        <!-- 차압 센서 -->
+        <div class="sensor-card pressure">
+            <div class="sensor-header">
+                <div class="sensor-icon">
+                    <i class="fas fa-compress-alt"></i>
+                </div>
+                <div class="sensor-title">차압</div>
+            </div>
+            <div class="sensor-value">
+                <span id="pressure-value" class="loading">--</span>
+                <span class="sensor-unit">Pa</span>
+            </div>
+            <div class="sensor-info" id="pressure-info">BME688 기준 대기압 변환</div>
+        </div>
+
+        <!-- 진동 센서 -->
+        <div class="sensor-card vibration">
+            <div class="sensor-header">
+                <div class="sensor-icon">
+                    <i class="fas fa-wave-square"></i>
+                </div>
+                <div class="sensor-title">진동</div>
+            </div>
+            <div class="sensor-value">
+                <span id="vibration-value" class="loading">--</span>
+                <span class="sensor-unit">g</span>
+            </div>
+            <div class="sensor-info" id="vibration-info">시간대별 가상 센서</div>
+        </div>
+
+        <!-- 공기질 센서 -->
+        <div class="sensor-card air-quality">
+            <div class="sensor-header">
+                <div class="sensor-icon">
+                    <i class="fas fa-leaf"></i>
+                </div>
+                <div class="sensor-title">공기질</div>
+            </div>
+            <div class="sensor-value">
+                <span id="air-quality-value" class="loading">--</span>
+                <span class="sensor-unit">/100</span>
+            </div>
+            <div class="sensor-info" id="air-quality-info">BME688 가스 저항 기반</div>
+        </div>
+    </div>
+
+    <div class="footer">
+        <p>🚀 EZ-Dash 실시간 센서 모니터링 시스템</p>
+        <p>라즈베리파이 4 + BME688 + BH1750</p>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin + '/api';
+        
+        let updateInterval;
+        let isUpdating = false;
+
+        // 페이지 로드 시 초기화
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('EZ-Dash 심플 대시보드 시작');
+            
+            // 초기 데이터 로드
+            updateSensorData();
+            
+            // 3초마다 자동 업데이트
+            updateInterval = setInterval(updateSensorData, 3000);
+            
+            // 페이지 언로드 시 정리
+            window.addEventListener('beforeunload', function() {
+                if (updateInterval) {
+                    clearInterval(updateInterval);
+                }
+            });
+        });
+
+        // 센서 데이터 업데이트
+        async function updateSensorData() {
+            if (isUpdating) return;
+            isUpdating = true;
+            
+            try {
+                // 업데이트 중 표시
+                document.querySelectorAll('.sensor-card').forEach(card => {
+                    card.classList.add('updating');
+                });
+                
+                // 현재 센서 데이터 가져오기
+                const response = await fetch(`${API_BASE}/current`);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                
+                // 센서 상태 가져오기
+                const statusResponse = await fetch(`${API_BASE}/status`);
+                const statusData = await statusResponse.json();
+                
+                // UI 업데이트
+                updateSensorDisplay(data);
+                updateStatus(statusData, data.timestamp);
+                
+                console.log('센서 데이터 업데이트 완료:', data);
+                
+            } catch (error) {
+                console.error('센서 데이터 업데이트 오류:', error);
+                updateStatus({ connected: false, error: error.message });
+                
+                // 에러 시 값들을 에러 상태로 표시
+                const sensors = ['temperature', 'humidity', 'light', 'pressure', 'vibration', 'air-quality'];
+                sensors.forEach(sensor => {
+                    const element = document.getElementById(`${sensor}-value`);
+                    if (element) {
+                        element.textContent = '오류';
+                        element.className = 'error';
+                    }
+                });
+            } finally {
+                // 업데이트 중 표시 제거
+                document.querySelectorAll('.sensor-card').forEach(card => {
+                    card.classList.remove('updating');
+                });
+                isUpdating = false;
+            }
+        }
+
+        // 센서 표시 업데이트
+        function updateSensorDisplay(data) {
+            // 온도
+            updateSensorValue('temperature', data.temperature, 1);
+            
+            // 습도
+            updateSensorValue('humidity', data.humidity, 1);
+            
+            // 조도
+            updateSensorValue('light', data.light, 0);
+            
+            // 차압
+            updateSensorValue('pressure', data.pressure, 1);
+            
+            // 진동
+            updateSensorValue('vibration', data.vibration, 2);
+            
+            // 공기질
+            updateSensorValue('air-quality', data.air_quality, 0);
+            
+            // 추가 정보 업데이트
+            document.getElementById('temperature-info').textContent = 
+                `BME688 센서 (절대압력: ${data.absolute_pressure.toFixed(1)} hPa)`;
+            document.getElementById('air-quality-info').textContent = 
+                `가스저항: ${data.gas_resistance.toFixed(0)} Ω`;
+        }
+
+        // 개별 센서 값 업데이트
+        function updateSensorValue(sensorId, value, decimals) {
+            const element = document.getElementById(`${sensorId}-value`);
+            if (element) {
+                if (typeof value === 'number') {
+                    element.textContent = value.toFixed(decimals);
+                    element.className = '';
+                } else {
+                    element.textContent = '--';
+                    element.className = 'loading';
+                }
+            }
+        }
+
+        // 상태 업데이트
+        function updateStatus(statusData, timestamp) {
+            const statusIcon = document.getElementById('status-icon');
+            const statusText = document.getElementById('status-text');
+            const lastUpdate = document.getElementById('last-update');
+            
+            if (statusData.connected) {
+                statusIcon.style.color = '#4caf50';
+                statusText.textContent = `센서 연결됨 (${statusData.total_sensors}/2)`;
+                
+                if (timestamp) {
+                    const time = new Date(timestamp).toLocaleTimeString();
+                    lastUpdate.textContent = ` | 업데이트: ${time}`;
+                }
+            } else {
+                statusIcon.style.color = '#f44336';
+                statusText.textContent = statusData.error ? `오류: ${statusData.error}` : '센서 연결 안됨';
+                lastUpdate.textContent = '';
+            }
+        }
+
+        // 에러 처리 함수
+        function showError(message) {
+            const grid = document.getElementById('sensors-grid');
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error';
+            errorDiv.innerHTML = `<i class="fas fa-exclamation-triangle"></i> ${message}`;
+            grid.insertBefore(errorDiv, grid.firstChild);
+            
+            // 5초 후 에러 메시지 제거
+            setTimeout(() => {
+                if (errorDiv.parentNode) {
+                    errorDiv.parentNode.removeChild(errorDiv);
+                }
+            }, 5000);
+        }
+    </script>
+</body>
+</html>
