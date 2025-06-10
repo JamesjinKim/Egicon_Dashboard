@@ -20,24 +20,30 @@ def test_individual_sensors():
     print("1. BME688 센서 테스트...")
     try:
         from sensor_manager import BME688Sensor
-        bme688 = BME688Sensor()
-        if bme688.connect():
-            print("   ✅ BME688 연결 성공")
-            
-            # 데이터 읽기 테스트
-            for i in range(3):
-                data = bme688.read_sensor_data()
-                if data:
-                    print(f"   📊 온도: {data['temperature']:.1f}°C, "
-                          f"습도: {data['humidity']:.1f}%, "
-                          f"압력: {data['pressure']:.1f}hPa, "
-                          f"가스: {data['gas_resistance']:.0f}Ω")
-                    break
-                time.sleep(1)
+        
+        # 자동 검색 먼저 시도
+        bme_bus, bme_addr = BME688Sensor.find_bme688()
+        if bme_bus is not None:
+            bme688 = BME688Sensor(bus_number=bme_bus, address=bme_addr)
+            if bme688.connect():
+                print("   ✅ BME688 연결 성공")
+                
+                # 데이터 읽기 테스트
+                for i in range(3):
+                    data = bme688.read_sensor_data()
+                    if data:
+                        print(f"   📊 온도: {data['temperature']:.1f}°C, "
+                              f"습도: {data['humidity']:.1f}%, "
+                              f"압력: {data['pressure']:.1f}hPa, "
+                              f"가스: {data['gas_resistance']:.0f}Ω")
+                        break
+                    time.sleep(1)
+                else:
+                    print("   ⚠️ BME688 데이터 읽기 실패")
             else:
-                print("   ⚠️ BME688 데이터 읽기 실패")
+                print("   ❌ BME688 연결 실패")
         else:
-            print("   ❌ BME688 연결 실패")
+            print("   ❌ BME688 센서를 찾을 수 없음")
     except Exception as e:
         print(f"   ❌ BME688 오류: {e}")
     
@@ -47,21 +53,27 @@ def test_individual_sensors():
     print("2. BH1750 센서 테스트...")
     try:
         from sensor_manager import BH1750Sensor
-        bh1750 = BH1750Sensor()
-        if bh1750.connect():
-            print("   ✅ BH1750 연결 성공")
-            
-            # 데이터 읽기 테스트
-            for i in range(3):
-                light = bh1750.read_light()
-                if light is not None:
-                    print(f"   📊 조도: {light:.1f} lux")
-                    break
-                time.sleep(1)
+        
+        # 자동 검색 먼저 시도
+        bh_bus, bh_addr = BH1750Sensor.find_bh1750()
+        if bh_bus is not None:
+            bh1750 = BH1750Sensor(bus_number=bh_bus, address=bh_addr)
+            if bh1750.connect():
+                print("   ✅ BH1750 연결 성공")
+                
+                # 데이터 읽기 테스트
+                for i in range(3):
+                    light = bh1750.read_light()
+                    if light is not None:
+                        print(f"   📊 조도: {light:.1f} lux")
+                        break
+                    time.sleep(1)
+                else:
+                    print("   ⚠️ BH1750 데이터 읽기 실패")
             else:
-                print("   ⚠️ BH1750 데이터 읽기 실패")
+                print("   ❌ BH1750 연결 실패")
         else:
-            print("   ❌ BH1750 연결 실패")
+            print("   ❌ BH1750 센서를 찾을 수 없음")
     except Exception as e:
         print(f"   ❌ BH1750 오류: {e}")
     

@@ -32,6 +32,38 @@ class BH1750Sensor:
         self.bus_number = bus_number
         self.address = address
         self.bus = None
+    
+    @staticmethod
+    def find_bh1750():
+        """BH1750 센서를 자동으로 찾기"""
+        print("BH1750 센서 검색 중...")
+        
+        for bus_num in [0, 1]:
+            for addr in [0x23, 0x5C]:  # BH1750의 일반적인 주소들
+                try:
+                    bus = smbus2.SMBus(bus_num)
+                    # BH1750 테스트: POWER_ON 명령 시도
+                    bus.write_byte(addr, 0x01)  # POWER_ON
+                    time.sleep(0.01)
+                    bus.write_byte(addr, 0x10)  # CONTINUOUS_HIGH_RES_MODE
+                    time.sleep(0.2)
+                    
+                    # 데이터 읽기 시도
+                    data = bus.read_i2c_block_data(addr, 0x10, 2)
+                    bus.close()
+                    
+                    print(f"✅ BH1750 발견: 버스 {bus_num}, 주소 0x{addr:02X}")
+                    return bus_num, addr
+                    
+                except Exception as e:
+                    try:
+                        bus.close()
+                    except:
+                        pass
+                    continue  # 연결 실패는 무시하고 계속 검색
+        
+        print("❌ BH1750 센서를 찾을 수 없습니다")
+        return None, None
         
     def connect(self):
         """BH1750 센서 연결 및 초기화"""
@@ -81,6 +113,28 @@ class BME688Sensor:
         self.bus = None
         self.temp_offset = temp_offset
         self.cal_data = const.CalibrationData()
+    
+    @staticmethod
+    def find_bme688():
+        """BME688 센서를 자동으로 찾기"""
+        print("BME688 센서 검색 중...")
+        
+        for bus_num in [0, 1]:
+            for addr in [0x77, 0x76]:  # 일반적인 BME688 주소들
+                try:
+                    bus = smbus2.SMBus(bus_num)
+                    chip_id = bus.read_byte_data(addr, const.CHIP_ID_ADDR)
+                    bus.close()
+                    
+                    if chip_id == const.CHIP_ID:
+                        print(f"✅ BME688 발견: 버스 {bus_num}, 주소 0x{addr:02X}")
+                        return bus_num, addr
+                        
+                except Exception as e:
+                    pass  # 연결 실패는 무시하고 계속 검색
+        
+        print("❌ BME688 센서를 찾을 수 없습니다")
+        return None, None
         
     def connect(self):
         """센서 연결 및 초기화"""
@@ -387,17 +441,25 @@ class SensorManager:
         
         success_count = 0
         
-        # BME688 초기화
-        self.bme688 = BME688Sensor()
-        if self.bme688.connect():
-            success_count += 1
+        # BME688 자동 검색 및 초기화
+        bme_bus, bme_addr = BME688Sensor.find_bme688()
+        if bme_bus is not None:
+            self.bme688 = BME688Sensor(bus_number=bme_bus, address=bme_addr)
+            if self.bme688.connect():
+                success_count += 1
+            else:
+                self.bme688 = None
         else:
             self.bme688 = None
         
-        # BH1750 초기화
-        self.bh1750 = BH1750Sensor()
-        if self.bh1750.connect():
-            success_count += 1
+        # BH1750 자동 검색 및 초기화
+        bh_bus, bh_addr = BH1750Sensor.find_bh1750()
+        if bh_bus is not None:
+            self.bh1750 = BH1750Sensor(bus_number=bh_bus, address=bh_addr)
+            if self.bh1750.connect():
+                success_count += 1
+            else:
+                self.bh1750 = None
         else:
             self.bh1750 = None
         
