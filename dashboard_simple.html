@@ -3,10 +3,29 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EZ-Dash 심플 센서 대시보드</title>
+    <title>센서 대시보드</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
     <style>
+        :root {
+            --primary-color: #3498db;
+            --secondary-color: #2c3e50;
+            --background-color: #f5f5f5;
+            --card-color: #ffffff;
+            --text-color: #333333;
+            --sidebar-width-collapsed: 60px;
+            --sidebar-width-expanded: 220px;
+            --header-height: 60px;
+            --transition-speed: 0.3s;
+            /* 센서별 색상 */
+            --temperature-color: #ff6384;
+            --humidity-color: #36a2eb; 
+            --light-color: #ffce56;
+            --pressure-color: #4bc0c0;
+            --vibration-color: #9966ff;
+            --airquality-color: #00d084;
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -15,146 +34,386 @@
         }
 
         body {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
+            display: flex;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            overflow-x: hidden;
+        }
+
+        /* 사이드바 스타일 */
+        .sidebar {
+            height: 100vh;
+            background-color: var(--secondary-color);
+            color: white;
+            width: var(--sidebar-width-collapsed);
+            position: fixed;
+            transition: width var(--transition-speed);
+            z-index: 100;
+            overflow-x: hidden;
+        }
+
+        .sidebar.expanded {
+            width: var(--sidebar-width-expanded);
+        }
+
+        .sidebar-header {
+            display: flex;
+            align-items: center;
             padding: 20px;
+            height: var(--header-height);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .sidebar-header h2 {
+            display: none;
+            margin-left: 15px;
+            white-space: nowrap;
+        }
+
+        .sidebar.expanded .sidebar-header h2 {
+            display: block;
+        }
+
+        .sidebar-toggle {
+            background: transparent;
+            border: none;
+            color: white;
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+
+        .sidebar-menu {
+            margin-top: 20px;
+        }
+
+        .menu-item {
+            display: flex;
+            align-items: center;
+            padding: 15px 20px;
+            color: white;
+            text-decoration: none;
+            transition: background-color 0.2s;
+            white-space: nowrap;
+        }
+
+        .menu-item:hover, .menu-item.active {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .menu-item i {
+            font-size: 1.2rem;
+            min-width: 20px;
+            text-align: center;
+        }
+
+        .menu-item span {
+            display: none;
+            margin-left: 15px;
+        }
+
+        .sidebar.expanded .menu-item span {
+            display: block;
+        }
+
+        /* 메인 콘텐츠 스타일 */
+        .main-content {
+            flex-grow: 1;
+            margin-left: var(--sidebar-width-collapsed);
+            transition: margin-left var(--transition-speed);
+            min-height: 100vh;
+            width: calc(100% - var(--sidebar-width-collapsed));
+        }
+
+        .main-content.sidebar-expanded {
+            margin-left: var(--sidebar-width-expanded);
+            width: calc(100% - var(--sidebar-width-expanded));
         }
 
         .header {
-            text-align: center;
-            color: white;
-            margin-bottom: 30px;
+            background-color: var(--card-color);
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            height: var(--header-height);
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
         }
 
-        .header h1 {
-            font-size: 2.5rem;
-            margin-bottom: 10px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        .user-info {
+            display: flex;
+            align-items: center;
         }
 
-        .status {
-            background: rgba(255,255,255,0.1);
-            padding: 10px 20px;
-            border-radius: 25px;
-            display: inline-block;
-            color: white;
-            margin-bottom: 20px;
+        .user-info img {
+            width: 35px;
+            height: 35px;
+            border-radius: 50%;
+            margin-right: 10px;
         }
 
-        .sensors-grid {
+        .user-info .user-details {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .user-info .user-name {
+            font-weight: bold;
+        }
+
+        .user-info .user-role {
+            font-size: 0.8rem;
+            color: #777;
+        }
+
+        .dashboard-container {
+            padding: 20px;
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
             gap: 20px;
-            max-width: 1200px;
-            margin: 0 auto;
         }
 
-        .sensor-card {
-            background: white;
-            border-radius: 15px;
-            padding: 25px;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
-            position: relative;
-            overflow: hidden;
-            min-height: 280px;
+        .card {
+            background-color: var(--card-color);
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            transition: transform 0.2s;
         }
 
-        .sensor-card:hover {
+        .card:hover {
             transform: translateY(-5px);
-            box-shadow: 0 12px 40px rgba(0,0,0,0.15);
         }
 
-        .sensor-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 4px;
-            background: var(--sensor-color);
-        }
-
-        .sensor-header {
+        .card-header {
             display: flex;
+            justify-content: space-between;
             align-items: center;
-            margin-bottom: 20px;
+            margin-bottom: 15px;
         }
 
-        .sensor-icon {
-            width: 50px;
-            height: 50px;
+        .card-title {
+            font-size: 1.1rem;
+            font-weight: bold;
+            color: var(--secondary-color);
+        }
+
+        .card-icon {
+            background-color: var(--primary-color);
+            width: 30px;
+            height: 30px;
             border-radius: 50%;
-            background: var(--sensor-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+        }
+
+        .sensor-value {
+            font-size: 1.8rem;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+
+        .sensor-unit {
+            font-size: 0.9rem;
+            color: #777;
+        }
+
+        .chart-container {
+            height: 200px;
+            margin-top: 10px;
+        }
+
+        /* 대형 차트를 위한 스타일 */
+        .large-chart {
+            grid-column: span 5;
+        }
+
+        /* 센서 위젯 스타일 */
+        .sensor-widgets-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            padding: 20px;
+            width: 100%;
+        }
+
+        .sensor-widget {
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            height: 110px;
+            display: flex;
+            overflow: hidden;
+            position: relative;
+            width: 100%;
+        }
+
+        .widget-color-bar {
+            width: 6px;
+            height: 100%;
+        }
+
+        .widget-content {
+            flex: 1;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .widget-icon {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
             color: white;
-            font-size: 1.5rem;
-            margin-right: 15px;
+            opacity: 0.9;
         }
 
-        .sensor-title {
-            font-size: 1.2rem;
-            font-weight: 600;
-            color: #333;
+        .widget-title {
+            color: #777;
+            font-size: 14px;
+            font-weight: 500;
+            text-transform: uppercase;
+            margin-top: 25px;
+            margin-left: 45px;
         }
 
-        .sensor-value {
-            font-size: 3rem;
-            font-weight: 700;
-            color: var(--sensor-color);
-            margin-bottom: 10px;
+        .widget-value {
+            font-size: 28px;
+            font-weight: bold;
+            margin-top: 5px;
+            padding-left: 45px;
         }
 
-        .sensor-unit {
-            font-size: 1.2rem;
-            color: #666;
+        .widget-unit {
+            font-size: 16px;
+            color: #777;
             font-weight: normal;
+            margin-left: 3px;
         }
 
-        .sensor-info {
-            font-size: 0.9rem;
-            color: #888;
-            border-top: 1px solid #eee;
-            padding-top: 15px;
-            margin-bottom: 15px;
+        /* 센서별 색상 스타일 */
+        .temperature .widget-color-bar { background-color: var(--temperature-color); }
+        .temperature .widget-icon { background-color: var(--temperature-color); }
+        
+        .humidity .widget-color-bar { background-color: var(--humidity-color); }
+        .humidity .widget-icon { background-color: var(--humidity-color); }
+        
+        .light .widget-color-bar { background-color: var(--light-color); }
+        .light .widget-icon { background-color: var(--light-color); }
+        
+        .pressure .widget-color-bar { background-color: var(--pressure-color); }
+        .pressure .widget-icon { background-color: var(--pressure-color); }
+        
+        .vibration .widget-color-bar { background-color: var(--vibration-color); }
+        .vibration .widget-icon { background-color: var(--vibration-color); }
+        
+        .airquality .widget-color-bar { background-color: var(--airquality-color); }
+        .airquality .widget-icon { background-color: var(--airquality-color); }
+
+        /* 상태 정보 표시 */
+        .status-bar {
+            background-color: var(--card-color);
+            padding: 10px 20px;
+            margin-top: 10px;
+            border-radius: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
         }
 
-        .sensor-chart {
-            height: 80px;
-            margin-top: 15px;
+        .status-item {
+            display: flex;
+            align-items: center;
         }
 
-        .sensor-chart canvas {
-            max-height: 80px !important;
+        .status-item i {
+            margin-right: 5px;
+            color: var(--primary-color);
         }
 
-        /* 센서별 색상 */
-        .temperature {
-            --sensor-color: #ff6b6b;
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(255, 255, 255, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
         }
 
-        .humidity {
-            --sensor-color: #4ecdc4;
+        .loading-spinner {
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid var(--primary-color);
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
         }
 
-        .light {
-            --sensor-color: #ffe66d;
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
 
-        .pressure {
-            --sensor-color: #a8e6cf;
+        @media (max-width: 768px) {
+            .sensor-widgets-container {
+                grid-template-columns: 1fr;
+            }
+            
+            .sensor-widget {
+                max-width: 100%;
+            }
+
+            .large-chart {
+                grid-column: span 1;
+            }
+
+            .dashboard-container {
+                grid-template-columns: 1fr;
+            }
+
+            .sidebar {
+                width: 0;
+            }
+
+            .sidebar.expanded {
+                width: var(--sidebar-width-expanded);
+            }
+
+            .main-content {
+                margin-left: 0;
+                width: 100%;
+            }
+
+            .main-content.sidebar-expanded {
+                margin-left: var(--sidebar-width-expanded);
+                width: calc(100% - var(--sidebar-width-expanded));
+            }
+
+            .sensor-widgets-container {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            .sensor-widget {
+                width: 100%;
+                max-width: 300px;
+            }
         }
 
-        .vibration {
-            --sensor-color: #ff8b94;
-        }
-
-        .air-quality {
-            --sensor-color: #88d8b0;
-        }
-
+        /* 로딩/에러 상태 */
         .loading {
             text-align: center;
             color: #666;
@@ -170,28 +429,6 @@
             text-align: center;
         }
 
-        .footer {
-            text-align: center;
-            color: rgba(255,255,255,0.8);
-            margin-top: 40px;
-            font-size: 0.9rem;
-        }
-
-        @media (max-width: 768px) {
-            .sensors-grid {
-                grid-template-columns: 1fr;
-                gap: 15px;
-            }
-            
-            .header h1 {
-                font-size: 2rem;
-            }
-            
-            .sensor-value {
-                font-size: 2.5rem;
-            }
-        }
-
         /* 애니메이션 */
         @keyframes pulse {
             0% { opacity: 1; }
@@ -205,409 +442,729 @@
     </style>
 </head>
 <body>
-    <div class="header">
-        <h1><i class="fas fa-chart-line"></i> EZ-Dash 센서 모니터</h1>
-        <div class="status" id="status">
-            <i class="fas fa-circle" id="status-icon"></i>
-            <span id="status-text">연결 중...</span>
-            <span id="last-update"></span>
+    <!-- 로딩 오버레이 -->
+    <div class="loading-overlay" id="loading-overlay" style="display: none;">
+        <div class="loading-spinner"></div>
+    </div>
+
+    <!-- 사이드바 -->
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <button class="sidebar-toggle" id="sidebar-toggle">
+                <i class="fas fa-bars"></i>
+            </button>
+            <h2>센서 대시보드</h2>
+        </div>
+        <div class="sidebar-menu">
+            <a href="#" class="menu-item active">
+                <i class="fas fa-home"></i>
+                <span>대시보드</span>
+            </a>
+            <a href="#" class="menu-item">
+                <i class="fas fa-thermometer-half"></i>
+                <span>온도 센서</span>
+            </a>
+            <a href="#" class="menu-item">
+                <i class="fas fa-tint"></i>
+                <span>습도 센서</span>
+            </a>
+            <a href="#" class="menu-item">
+                <i class="fas fa-sun"></i>
+                <span>조도 센서</span>
+            </a>
+            <a href="#" class="menu-item">
+                <i class="fas fa-compress-alt"></i>
+                <span>차압 센서</span>
+            </a>
+            <a href="#" class="menu-item">
+                <i class="fas fa-wave-square"></i>
+                <span>진동 센서</span>
+            </a>
+            <a href="#" class="menu-item">
+                <i class="fas fa-leaf"></i>
+                <span>공기질 센서</span>
+            </a>
+            <a href="#" class="menu-item">
+                <i class="fas fa-cog"></i>
+                <span>설정</span>
+            </a>
+            <a href="#" class="menu-item" id="refresh-data">
+                <i class="fas fa-sync-alt"></i>
+                <span>데이터 갱신</span>
+            </a>
         </div>
     </div>
 
-    <div class="sensors-grid" id="sensors-grid">
-        <!-- 온도 센서 -->
-        <div class="sensor-card temperature">
-            <div class="sensor-header">
-                <div class="sensor-icon">
-                    <i class="fas fa-thermometer-half"></i>
+    <!-- 메인 콘텐츠 -->
+    <div class="main-content" id="main-content">
+        <div class="header">
+            <h1>EZ-icon 센서 대시보드</h1>
+            <div class="user-info">
+                <div class="user-details">
+                    <span class="user-name">ShinHoTechnology</span>
+                    <span class="user-role">관리자</span>
                 </div>
-                <div class="sensor-title">온도</div>
-            </div>
-            <div class="sensor-value">
-                <span id="temperature-value" class="loading">--</span>
-                <span class="sensor-unit">°C</span>
-            </div>
-            <div class="sensor-info" id="temperature-info">BME688 센서</div>
-            <div class="sensor-chart">
-                <canvas id="temperature-chart"></canvas>
             </div>
         </div>
 
-        <!-- 습도 센서 -->
-        <div class="sensor-card humidity">
-            <div class="sensor-header">
-                <div class="sensor-icon">
-                    <i class="fas fa-tint"></i>
-                </div>
-                <div class="sensor-title">습도</div>
+        <!-- 상태 정보 표시 -->
+        <div class="status-bar">
+            <div class="status-item">
+                <i class="fas fa-clock"></i>
+                <span id="last-update">마지막 업데이트: 로딩 중...</span>
             </div>
-            <div class="sensor-value">
-                <span id="humidity-value" class="loading">--</span>
-                <span class="sensor-unit">%</span>
-            </div>
-            <div class="sensor-info" id="humidity-info">BME688 센서</div>
-            <div class="sensor-chart">
-                <canvas id="humidity-chart"></canvas>
+            <div class="status-item">
+                <i class="fas fa-database"></i>
+                <span id="db-status">데이터베이스 상태: 연결 중...</span>
             </div>
         </div>
 
-        <!-- 조도 센서 -->
-        <div class="sensor-card light">
-            <div class="sensor-header">
-                <div class="sensor-icon">
-                    <i class="fas fa-sun"></i>
+        <!-- 센서 위젯 섹션 -->
+        <div class="sensor-widgets-container">
+            <!-- 온도 센서 위젯 -->
+            <div class="sensor-widget temperature">
+                <div class="widget-color-bar"></div>
+                <div class="widget-content">
+                    <div class="widget-icon">
+                        <i class="fas fa-thermometer-half"></i>
+                    </div>
+                    <div class="widget-title">TEMPERATURE</div>
+                    <div class="widget-value" id="temp-value">--<span class="widget-unit">°C</span></div>
                 </div>
-                <div class="sensor-title">조도</div>
             </div>
-            <div class="sensor-value">
-                <span id="light-value" class="loading">--</span>
-                <span class="sensor-unit">lux</span>
+
+            <!-- 습도 센서 위젯 -->
+            <div class="sensor-widget humidity">
+                <div class="widget-color-bar"></div>
+                <div class="widget-content">
+                    <div class="widget-icon">
+                        <i class="fas fa-tint"></i>
+                    </div>
+                    <div class="widget-title">HUMIDITY</div>
+                    <div class="widget-value" id="humidity-value">--<span class="widget-unit">%</span></div>
+                </div>
             </div>
-            <div class="sensor-info" id="light-info">BH1750 센서</div>
-            <div class="sensor-chart">
-                <canvas id="light-chart"></canvas>
+
+            <!-- 조도 센서 위젯 -->
+            <div class="sensor-widget light">
+                <div class="widget-color-bar"></div>
+                <div class="widget-content">
+                    <div class="widget-icon">
+                        <i class="fas fa-sun"></i>
+                    </div>
+                    <div class="widget-title">LIGHT</div>
+                    <div class="widget-value" id="light-value">--<span class="widget-unit">lux</span></div>
+                </div>
+            </div>
+
+            <!-- 차압 센서 위젯 -->
+            <div class="sensor-widget pressure">
+                <div class="widget-color-bar"></div>
+                <div class="widget-content">
+                    <div class="widget-icon">
+                        <i class="fas fa-compress-alt"></i>
+                    </div>
+                    <div class="widget-title">PRESSURE</div>
+                    <div class="widget-value" id="pressure-value">--<span class="widget-unit">Pa</span></div>
+                </div>
+            </div>
+
+            <!-- 진동 센서 위젯 -->
+            <div class="sensor-widget vibration">
+                <div class="widget-color-bar"></div>
+                <div class="widget-content">
+                    <div class="widget-icon">
+                        <i class="fas fa-wave-square"></i>
+                    </div>
+                    <div class="widget-title">VIBRATION</div>
+                    <div class="widget-value" id="vibration-value">--<span class="widget-unit">g</span></div>
+                </div>
+            </div>
+
+            <!-- 공기질 센서 위젯 -->
+            <div class="sensor-widget airquality">
+                <div class="widget-color-bar"></div>
+                <div class="widget-content">
+                    <div class="widget-icon">
+                        <i class="fas fa-leaf"></i>
+                    </div>
+                    <div class="widget-title">AIR QUALITY</div>
+                    <div class="widget-value" id="airquality-value">--<span class="widget-unit">/100</span></div>
+                </div>
             </div>
         </div>
 
-        <!-- 차압 센서 -->
-        <div class="sensor-card pressure">
-            <div class="sensor-header">
-                <div class="sensor-icon">
-                    <i class="fas fa-compress-alt"></i>
+        <div class="dashboard-container">
+            <!-- 온도 센서 카드 -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">온도 센서</div>
+                    <div class="card-icon">
+                        <i class="fas fa-thermometer-half"></i>
+                    </div>
                 </div>
-                <div class="sensor-title">차압</div>
+                <div class="sensor-value" id="temp-card-value">--<span class="sensor-unit">°C</span></div>
+                <div class="chart-container">
+                    <canvas id="temperatureChart"></canvas>
+                </div>
             </div>
-            <div class="sensor-value">
-                <span id="pressure-value" class="loading">--</span>
-                <span class="sensor-unit">Pa</span>
+
+            <!-- 습도 센서 카드 -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">습도 센서</div>
+                    <div class="card-icon">
+                        <i class="fas fa-tint"></i>
+                    </div>
+                </div>
+                <div class="sensor-value" id="humidity-card-value">--<span class="sensor-unit">%</span></div>
+                <div class="chart-container">
+                    <canvas id="humidityChart"></canvas>
+                </div>
             </div>
-            <div class="sensor-info" id="pressure-info">BME688 기준 대기압 변환</div>
-            <div class="sensor-chart">
-                <canvas id="pressure-chart"></canvas>
+
+            <!-- 조도 센서 카드 -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">조도 센서</div>
+                    <div class="card-icon">
+                        <i class="fas fa-sun"></i>
+                    </div>
+                </div>
+                <div class="sensor-value" id="light-card-value">--<span class="sensor-unit">lux</span></div>
+                <div class="chart-container">
+                    <canvas id="lightChart"></canvas>
+                </div>
+            </div>
+
+            <!-- 차압 센서 카드 -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">차압 센서</div>
+                    <div class="card-icon">
+                        <i class="fas fa-compress-alt"></i>
+                    </div>
+                </div>
+                <div class="sensor-value" id="pressure-card-value">--<span class="sensor-unit">Pa</span></div>
+                <div class="chart-container">
+                    <canvas id="pressureChart"></canvas>
+                </div>
+            </div>
+
+            <!-- 진동 센서 카드 -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">진동 센서</div>
+                    <div class="card-icon">
+                        <i class="fas fa-wave-square"></i>
+                    </div>
+                </div>
+                <div class="sensor-value" id="vibration-card-value">--<span class="sensor-unit">g</span></div>
+                <div class="chart-container">
+                    <canvas id="vibrationChart"></canvas>
+                </div>
+            </div>
+
+            <!-- 공기질 센서 카드 -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">공기질 센서</div>
+                    <div class="card-icon">
+                        <i class="fas fa-leaf"></i>
+                    </div>
+                </div>
+                <div class="sensor-value" id="airquality-card-value">--<span class="sensor-unit">/100</span></div>
+                <div class="chart-container">
+                    <canvas id="airqualityChart"></canvas>
+                </div>
+            </div>
+
+            <!-- 대형 차트 (모든 센서 통합) -->
+            <div class="card large-chart">
+                <div class="card-header">
+                    <div class="card-title">통합 센서 데이터</div>
+                    <div class="card-icon">
+                        <i class="fas fa-chart-line"></i>
+                    </div>
+                </div>
+                <div class="chart-container" style="height: 300px;">
+                    <canvas id="combinedChart"></canvas>
+                </div>
             </div>
         </div>
-
-        <!-- 진동 센서 -->
-        <div class="sensor-card vibration">
-            <div class="sensor-header">
-                <div class="sensor-icon">
-                    <i class="fas fa-wave-square"></i>
-                </div>
-                <div class="sensor-title">진동</div>
-            </div>
-            <div class="sensor-value">
-                <span id="vibration-value" class="loading">--</span>
-                <span class="sensor-unit">g</span>
-            </div>
-            <div class="sensor-info" id="vibration-info">시간대별 가상 센서</div>
-            <div class="sensor-chart">
-                <canvas id="vibration-chart"></canvas>
-            </div>
-        </div>
-
-        <!-- 공기질 센서 -->
-        <div class="sensor-card air-quality">
-            <div class="sensor-header">
-                <div class="sensor-icon">
-                    <i class="fas fa-leaf"></i>
-                </div>
-                <div class="sensor-title">공기질</div>
-            </div>
-            <div class="sensor-value">
-                <span id="air-quality-value" class="loading">--</span>
-                <span class="sensor-unit">/100</span>
-            </div>
-            <div class="sensor-info" id="air-quality-info">BME688 가스 저항 기반</div>
-            <div class="sensor-chart">
-                <canvas id="air-quality-chart"></canvas>
-            </div>
-        </div>
-    </div>
-
-    <div class="footer">
-        <p>🚀 EZ-Dash 실시간 센서 모니터링 시스템</p>
-        <p>라즈베리파이 4 + BME688 + BH1750</p>
     </div>
 
     <script>
-        const API_BASE = window.location.origin + '/api';
+        // API 엔드포인트 설정
+        const API_URL = window.location.origin + '/api';
+        
+        // 차트 객체 저장용 변수
+        const charts = {};
         
         let updateInterval;
         let isUpdating = false;
-        
-        // 차트 객체 저장
-        const charts = {};
-        
-        // 센서 데이터 히스토리 (최근 10개 포인트)
-        const sensorHistory = {
-            temperature: [],
-            humidity: [],
-            light: [],
-            pressure: [],
-            vibration: [],
-            airQuality: [],
-            timestamps: []
-        };
-        
-        const MAX_HISTORY_POINTS = 10;
 
-        // 페이지 로드 시 초기화
+        // DOM이 로드되면 실행
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('EZ-Dash 심플 대시보드 시작');
-            
-            // 차트 초기화
-            initializeCharts();
+            const sidebar = document.querySelector('.sidebar');
+            const mainContent = document.getElementById('main-content');
+            const sidebarToggle = document.getElementById('sidebar-toggle');
+            const refreshButton = document.getElementById('refresh-data');
+
+            // 사이드바 토글
+            sidebarToggle.addEventListener('click', function() {
+                sidebar.classList.toggle('expanded');
+                mainContent.classList.toggle('sidebar-expanded');
+            });
             
             // 초기 데이터 로드
-            updateSensorData();
+            loadSensorData();
+            
+            // 새로고침 버튼 이벤트
+            refreshButton.addEventListener('click', function(e) {
+                e.preventDefault();
+                updateSensorData();
+            });
             
             // 3초마다 자동 업데이트
-            updateInterval = setInterval(updateSensorData, 3000);
-            
-            // 페이지 언로드 시 정리
-            window.addEventListener('beforeunload', function() {
-                if (updateInterval) {
-                    clearInterval(updateInterval);
-                }
-            });
+            setInterval(updateSensorData, 3000);
         });
 
-        // 센서 데이터 업데이트
-        async function updateSensorData() {
-            if (isUpdating) return;
-            isUpdating = true;
+        // 센서 데이터 초기 로드
+        async function loadSensorData() {
+            showLoading();
             
             try {
-                // 업데이트 중 표시
-                document.querySelectorAll('.sensor-card').forEach(card => {
-                    card.classList.add('updating');
-                });
-                
                 // 현재 센서 데이터 가져오기
-                const response = await fetch(`${API_BASE}/current`);
+                const response = await fetch(`${API_URL}/current`);
                 
                 if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    throw new Error('서버 응답 오류');
                 }
                 
                 const data = await response.json();
                 
-                // 센서 상태 가져오기
-                const statusResponse = await fetch(`${API_BASE}/status`);
-                const statusData = await statusResponse.json();
-                
-                // 히스토리 데이터 추가
-                addToHistory(data);
-                
-                // UI 업데이트
+                // 데이터 표시 업데이트
                 updateSensorDisplay(data);
-                updateStatus(statusData, data.timestamp);
                 
-                // 차트 업데이트
-                updateAllCharts();
+                // 차트 설정
+                setupCharts(data);
                 
-                console.log('센서 데이터 업데이트 완료:', data);
+                // 상태 업데이트
+                document.getElementById('db-status').textContent = '데이터베이스 상태: 연결됨';
+                document.getElementById('last-update').textContent = `마지막 업데이트: ${formatDateTime(data.timestamp)}`;
+                
+                hideLoading();
+            } catch (error) {
+                console.error('데이터 로드 오류:', error);
+                document.getElementById('db-status').textContent = '데이터베이스 상태: 오류';
+                hideLoading();
+                
+                // 더미 데이터로 차트 초기화 (오류 대비)
+                setupDummyCharts();
+            }
+        }
+
+        // 센서 데이터 업데이트
+        async function updateSensorData() {
+            try {
+                // 현재 데이터 가져오기
+                const currentResponse = await fetch(`${API_URL}/current`);
+                
+                if (!currentResponse.ok) {
+                    throw new Error('현재 데이터 조회 오류');
+                }
+                
+                const currentData = await currentResponse.json();
+                
+                // 위젯 데이터 업데이트
+                updateWidgetValues(currentData);
+                
+                // 상태 업데이트
+                document.getElementById('last-update').textContent = `마지막 업데이트: ${formatDateTime(currentData.timestamp)}`;
+                document.getElementById('db-status').textContent = '데이터베이스 상태: 연결됨';
                 
             } catch (error) {
-                console.error('센서 데이터 업데이트 오류:', error);
-                updateStatus({ connected: false, error: error.message });
-                
-                // 에러 시 값들을 에러 상태로 표시
-                const sensors = ['temperature', 'humidity', 'light', 'pressure', 'vibration', 'air-quality'];
-                sensors.forEach(sensor => {
-                    const element = document.getElementById(`${sensor}-value`);
-                    if (element) {
-                        element.textContent = '오류';
-                        element.className = 'error';
-                    }
-                });
-            } finally {
-                // 업데이트 중 표시 제거
-                document.querySelectorAll('.sensor-card').forEach(card => {
-                    card.classList.remove('updating');
-                });
-                isUpdating = false;
+                console.error('데이터 업데이트 오류:', error);
+                document.getElementById('db-status').textContent = '데이터베이스 상태: 오류';
             }
         }
 
-        // 센서 표시 업데이트
+        // 위젯 및 카드 데이터 표시 업데이트
         function updateSensorDisplay(data) {
-            // 온도
-            updateSensorValue('temperature', data.temperature, 1);
-            
-            // 습도
-            updateSensorValue('humidity', data.humidity, 1);
-            
-            // 조도
-            updateSensorValue('light', data.light, 0);
-            
-            // 차압
-            updateSensorValue('pressure', data.pressure, 1);
-            
-            // 진동
-            updateSensorValue('vibration', data.vibration, 2);
-            
-            // 공기질
-            updateSensorValue('air-quality', data.air_quality, 0);
-            
-            // 추가 정보 업데이트
-            document.getElementById('temperature-info').textContent = 
-                `BME688 센서 (절대압력: ${data.absolute_pressure.toFixed(1)} hPa)`;
-            document.getElementById('air-quality-info').textContent = 
-                `가스저항: ${data.gas_resistance.toFixed(0)} Ω`;
+            // 위젯 업데이트
+            updateWidgetValues(data);
         }
 
-        // 개별 센서 값 업데이트
-        function updateSensorValue(sensorId, value, decimals) {
-            const element = document.getElementById(`${sensorId}-value`);
-            if (element) {
-                if (typeof value === 'number') {
-                    element.textContent = value.toFixed(decimals);
-                    element.className = '';
-                } else {
-                    element.textContent = '--';
-                    element.className = 'loading';
-                }
-            }
-        }
-
-        // 상태 업데이트
-        function updateStatus(statusData, timestamp) {
-            const statusIcon = document.getElementById('status-icon');
-            const statusText = document.getElementById('status-text');
-            const lastUpdate = document.getElementById('last-update');
-            
-            if (statusData.connected) {
-                statusIcon.style.color = '#4caf50';
-                statusText.textContent = `센서 연결됨 (${statusData.total_sensors}/2)`;
+        // 위젯 값 업데이트
+        function updateWidgetValues(data) {
+            // 위젯 업데이트
+            document.getElementById('temp-value').innerHTML = 
+                data.temperature.toFixed(1) + '<span class="widget-unit">°C</span>';
+            document.getElementById('humidity-value').innerHTML = 
+                data.humidity.toFixed(1) + '<span class="widget-unit">%</span>';
+            document.getElementById('light-value').innerHTML = 
+                Math.round(data.light) + '<span class="widget-unit">lux</span>';
+            document.getElementById('pressure-value').innerHTML = 
+                data.pressure.toFixed(1) + '<span class="widget-unit">Pa</span>';
+            document.getElementById('vibration-value').innerHTML = 
+                data.vibration.toFixed(2) + '<span class="widget-unit">g</span>';
+            document.getElementById('airquality-value').innerHTML = 
+                Math.round(data.air_quality) + '<span class="widget-unit">/100</span>';
                 
-                if (timestamp) {
-                    const time = new Date(timestamp).toLocaleTimeString();
-                    lastUpdate.textContent = ` | 업데이트: ${time}`;
-                }
-            } else {
-                statusIcon.style.color = '#f44336';
-                statusText.textContent = statusData.error ? `오류: ${statusData.error}` : '센서 연결 안됨';
-                lastUpdate.textContent = '';
-            }
+            // 카드 값 업데이트
+            document.getElementById('temp-card-value').innerHTML = 
+                data.temperature.toFixed(1) + '<span class="sensor-unit">°C</span>';
+            document.getElementById('humidity-card-value').innerHTML = 
+                data.humidity.toFixed(1) + '<span class="sensor-unit">%</span>';
+            document.getElementById('light-card-value').innerHTML = 
+                Math.round(data.light) + '<span class="sensor-unit">lux</span>';
+            document.getElementById('pressure-card-value').innerHTML = 
+                data.pressure.toFixed(1) + '<span class="sensor-unit">Pa</span>';
+            document.getElementById('vibration-card-value').innerHTML = 
+                data.vibration.toFixed(2) + '<span class="sensor-unit">g</span>';
+            document.getElementById('airquality-card-value').innerHTML = 
+                Math.round(data.air_quality) + '<span class="sensor-unit">/100</span>';
         }
 
-        // 차트 초기화
-        function initializeCharts() {
-            const chartConfigs = [
-                { id: 'temperature-chart', color: '#ff6b6b', type: 'line' },
-                { id: 'humidity-chart', color: '#4ecdc4', type: 'line' },
-                { id: 'light-chart', color: '#ffe66d', type: 'bar' },
-                { id: 'pressure-chart', color: '#a8e6cf', type: 'line' },
-                { id: 'vibration-chart', color: '#ff8b94', type: 'bar' },
-                { id: 'air-quality-chart', color: '#88d8b0', type: 'line' }
-            ];
+        // 차트 설정
+        function setupCharts(data) {
+            // 더미 히스토리 데이터 생성 (최근 24시간)
+            const timeLabels = generateTimeLabels(24);
+            const dummyHistory = generateDummyHistory(24, data);
+            
+            // 차트 설정값
+            const chartConfigs = {
+                temperature: {
+                    id: 'temperatureChart',
+                    label: '온도 (°C)',
+                    color: '#FF6384',
+                    data: dummyHistory.temperature,
+                    type: 'line'
+                },
+                humidity: {
+                    id: 'humidityChart',
+                    label: '습도 (%)',
+                    color: '#36A2EB',
+                    data: dummyHistory.humidity,
+                    type: 'line'
+                },
+                light: {
+                    id: 'lightChart',
+                    label: '조도 (lux)',
+                    color: '#FFCE56',
+                    data: dummyHistory.light,
+                    type: 'bar'
+                },
+                pressure: {
+                    id: 'pressureChart',
+                    label: '차압 (Pa)',
+                    color: '#4BC0C0',
+                    data: dummyHistory.pressure,
+                    type: 'line'
+                },
+                vibration: {
+                    id: 'vibrationChart',
+                    label: '진동 (g)',
+                    color: '#9966FF',
+                    data: dummyHistory.vibration,
+                    type: 'bar'
+                },
+                airquality: {
+                    id: 'airqualityChart',
+                    label: '공기질 (/100)',
+                    color: '#00d084',
+                    data: dummyHistory.airquality,
+                    type: 'line'
+                }
+            };
 
-            chartConfigs.forEach(config => {
+            // 개별 차트 생성
+            for (const [sensor, config] of Object.entries(chartConfigs)) {
                 const ctx = document.getElementById(config.id);
                 if (ctx) {
-                    charts[config.id] = new Chart(ctx.getContext('2d'), {
-                        type: config.type,
-                        data: {
-                            labels: Array(MAX_HISTORY_POINTS).fill(''),
-                            datasets: [{
-                                data: Array(MAX_HISTORY_POINTS).fill(null),
-                                borderColor: config.color,
-                                backgroundColor: config.type === 'bar' 
-                                    ? config.color + '80'  // 50% 투명도
-                                    : 'transparent',
-                                borderWidth: 2,
-                                pointRadius: 2,
-                                pointHoverRadius: 4,
-                                tension: 0.4,
-                                fill: false
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            plugins: {
-                                legend: { display: false },
-                                tooltip: { enabled: false }
+                    // 이미 존재하는 차트 파괴
+                    if (charts[sensor]) {
+                        charts[sensor].destroy();
+                    }
+                    
+                    // 온도/습도 복합 차트 생성
+                    if (sensor === 'temperature') {
+                        charts[sensor] = new Chart(ctx.getContext('2d'), {
+                            type: 'line',
+                            data: {
+                                labels: timeLabels,
+                                datasets: [
+                                    {
+                                        label: '온도 (°C)',
+                                        data: dummyHistory.temperature,
+                                        borderColor: '#FF6384',
+                                        backgroundColor: 'transparent',
+                                        borderWidth: 2,
+                                        tension: 0.4,
+                                        yAxisID: 'y'
+                                    },
+                                    {
+                                        label: '습도 (%)',
+                                        data: dummyHistory.humidity,
+                                        borderColor: '#36A2EB',
+                                        backgroundColor: 'transparent',
+                                        borderWidth: 2,
+                                        tension: 0.4,
+                                        yAxisID: 'y1'
+                                    }
+                                ]
                             },
-                            scales: {
-                                x: { display: false },
-                                y: { 
-                                    display: false,
-                                    beginAtZero: false
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                scales: {
+                                    x: { display: false },
+                                    y: {
+                                        type: 'linear',
+                                        position: 'left',
+                                        title: { display: true, text: '온도 (°C)' },
+                                        grid: { borderDash: [2, 2] }
+                                    },
+                                    y1: {
+                                        type: 'linear',
+                                        position: 'right',
+                                        title: { display: true, text: '습도 (%)' },
+                                        grid: { display: false }
+                                    }
+                                },
+                                plugins: {
+                                    legend: { display: true, position: 'top' },
+                                    title: { display: true, text: '온도 & 습도', font: { size: 12 } }
                                 }
+                            }
+                        });
+                    } else if (sensor !== 'humidity') {
+                        // 습도는 온도 차트에 포함되므로 별도 생성하지 않음
+                        charts[sensor] = new Chart(ctx.getContext('2d'), {
+                            type: config.type,
+                            data: {
+                                labels: timeLabels,
+                                datasets: [{
+                                    label: config.label,
+                                    data: config.data,
+                                    borderColor: config.color,
+                                    backgroundColor: config.type === 'bar' 
+                                        ? config.color + 'B3'  // 70% opacity
+                                        : config.color + '1A', // 10% opacity
+                                    tension: 0.4,
+                                    fill: config.type !== 'bar'
+                                }]
                             },
-                            elements: {
-                                point: { radius: 0 }
+                            options: getChartOptions(config.label)
+                        });
+                    }
+                }
+            }
+            
+            // 통합 차트 생성
+            const combinedCtx = document.getElementById('combinedChart');
+            if (combinedCtx) {
+                // 이미 존재하는 차트 파괴
+                if (charts.combined) {
+                    charts.combined.destroy();
+                }
+                
+                charts.combined = new Chart(combinedCtx.getContext('2d'), {
+                    type: 'line',
+                    data: {
+                        labels: timeLabels,
+                        datasets: [
+                            {
+                                label: '온도 (°C)',
+                                data: dummyHistory.temperature,
+                                borderColor: '#FF6384',
+                                backgroundColor: 'transparent',
+                                borderWidth: 2,
+                                tension: 0.4,
+                                yAxisID: 'y1'
                             },
-                            animation: {
-                                duration: 500
+                            {
+                                label: '습도 (%)',
+                                data: dummyHistory.humidity,
+                                borderColor: '#36A2EB',
+                                backgroundColor: 'transparent',
+                                borderWidth: 2,
+                                tension: 0.4,
+                                yAxisID: 'y1'
+                            },
+                            {
+                                label: '조도 (lux/10)',
+                                data: dummyHistory.light.map(v => v/10),
+                                borderColor: '#FFCE56',
+                                backgroundColor: 'transparent',
+                                borderWidth: 2,
+                                tension: 0.4,
+                                yAxisID: 'y1'
+                            },
+                            {
+                                label: '차압 (Pa)',
+                                data: dummyHistory.pressure,
+                                borderColor: '#4BC0C0',
+                                backgroundColor: 'transparent',
+                                borderWidth: 2,
+                                tension: 0.4,
+                                yAxisID: 'y1'
+                            },
+                            {
+                                label: '진동 (g*100)',
+                                data: dummyHistory.vibration.map(v => v*100),
+                                borderColor: '#9966FF',
+                                backgroundColor: 'transparent',
+                                borderWidth: 2,
+                                tension: 0.4,
+                                yAxisID: 'y1'
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            x: {
+                                grid: { display: false }
+                            },
+                            y1: {
+                                type: 'linear',
+                                position: 'left',
+                                title: {
+                                    display: true,
+                                    text: '측정값'
+                                },
+                                grid: {
+                                    borderDash: [2, 2]
+                                }
+                            }
+                        },
+                        plugins: {
+                            legend: {
+                                position: 'top'
+                            },
+                            title: {
+                                display: true,
+                                text: '통합 센서 데이터'
                             }
                         }
-                    });
-                }
-            });
+                    }
+                });
+            }
         }
 
-        // 히스토리 데이터에 새 값 추가
-        function addToHistory(data) {
-            // 타임스탬프 추가
-            const timeLabel = new Date(data.timestamp).toLocaleTimeString('ko-KR', {
-                hour: '2-digit',
-                minute: '2-digit'
-            });
+        // 더미 차트 설정 (오류 발생 시)
+        function setupDummyCharts() {
+            // 시간 레이블
+            const timeLabels = generateTimeLabels(24);
             
-            sensorHistory.timestamps.push(timeLabel);
-            sensorHistory.temperature.push(data.temperature);
-            sensorHistory.humidity.push(data.humidity);
-            sensorHistory.light.push(data.light);
-            sensorHistory.pressure.push(data.pressure);
-            sensorHistory.vibration.push(data.vibration);
-            sensorHistory.airQuality.push(data.air_quality);
-
-            // 최대 포인트 수 제한
-            Object.keys(sensorHistory).forEach(key => {
-                if (sensorHistory[key].length > MAX_HISTORY_POINTS) {
-                    sensorHistory[key].shift();
-                }
-            });
-        }
-
-        // 모든 차트 업데이트
-        function updateAllCharts() {
-            const chartMappings = [
-                { id: 'temperature-chart', data: sensorHistory.temperature },
-                { id: 'humidity-chart', data: sensorHistory.humidity },
-                { id: 'light-chart', data: sensorHistory.light },
-                { id: 'pressure-chart', data: sensorHistory.pressure },
-                { id: 'vibration-chart', data: sensorHistory.vibration },
-                { id: 'air-quality-chart', data: sensorHistory.airQuality }
-            ];
-
-            chartMappings.forEach(mapping => {
-                const chart = charts[mapping.id];
-                if (chart) {
-                    chart.data.labels = [...sensorHistory.timestamps];
-                    chart.data.datasets[0].data = [...mapping.data];
-                    chart.update('none'); // 애니메이션 없이 빠른 업데이트
-                }
-            });
-        }
-
-        // 에러 처리 함수
-        function showError(message) {
-            const grid = document.getElementById('sensors-grid');
-            const errorDiv = document.createElement('div');
-            errorDiv.className = 'error';
-            errorDiv.innerHTML = `<i class="fas fa-exclamation-triangle"></i> ${message}`;
-            grid.insertBefore(errorDiv, grid.firstChild);
+            // 더미 데이터
+            const dummyData = {
+                temperature: Array.from({length: 24}, () => Math.random() * 8 + 20),
+                humidity: Array.from({length: 24}, () => Math.random() * 35 + 40),
+                light: Array.from({length: 24}, () => Math.random() * 1000 + 500),
+                pressure: Array.from({length: 24}, () => Math.random() * 15 + 5),
+                vibration: Array.from({length: 24}, () => Math.random() * 0.49 + 0.01),
+                airquality: Array.from({length: 24}, () => Math.random() * 40 + 30)
+            };
             
-            // 5초 후 에러 메시지 제거
-            setTimeout(() => {
-                if (errorDiv.parentNode) {
-                    errorDiv.parentNode.removeChild(errorDiv);
+            setupCharts({
+                temperature: dummyData.temperature[23],
+                humidity: dummyData.humidity[23],
+                light: dummyData.light[23],
+                pressure: dummyData.pressure[23],
+                vibration: dummyData.vibration[23],
+                air_quality: dummyData.airquality[23]
+            });
+        }
+
+        // 더미 히스토리 데이터 생성
+        function generateDummyHistory(hours, currentData) {
+            const data = {
+                temperature: [],
+                humidity: [],
+                light: [],
+                pressure: [],
+                vibration: [],
+                airquality: []
+            };
+            
+            for (let i = 0; i < hours; i++) {
+                data.temperature.push(currentData.temperature + (Math.random() - 0.5) * 4);
+                data.humidity.push(currentData.humidity + (Math.random() - 0.5) * 10);
+                data.light.push(currentData.light + (Math.random() - 0.5) * 200);
+                data.pressure.push(currentData.pressure + (Math.random() - 0.5) * 5);
+                data.vibration.push(currentData.vibration + (Math.random() - 0.5) * 0.1);
+                data.airquality.push(currentData.air_quality + (Math.random() - 0.5) * 10);
+            }
+            
+            return data;
+        }
+
+        // 시간 레이블 생성 함수 (지난 n시간)
+        function generateTimeLabels(hours) {
+            const labels = [];
+            const now = new Date();
+            
+            for (let i = hours - 1; i >= 0; i--) {
+                const time = new Date(now);
+                time.setHours(now.getHours() - i);
+                labels.push(time.getHours() + ':00');
+            }
+            
+            return labels;
+        }
+
+        // 차트 옵션 가져오기 함수
+        function getChartOptions(title) {
+            return {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    title: {
+                        display: true,
+                        text: title,
+                        font: {
+                            size: 12
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        display: false
+                    },
+                    y: {
+                        beginAtZero: false
+                    }
                 }
-            }, 5000);
+            };
+        }
+
+        // 로딩 표시
+        function showLoading() {
+            document.getElementById('loading-overlay').style.display = 'flex';
+        }
+
+        // 로딩 숨기기
+        function hideLoading() {
+            document.getElementById('loading-overlay').style.display = 'none';
+        }
+
+        // 시간 포맷팅
+        function formatTime(timestamp) {
+            const date = new Date(timestamp);
+            return date.getHours() + ':' + (date.getMinutes() < 10 ? '0' : '') + date.getMinutes();
+        }
+
+        // 날짜 및 시간 포맷팅
+        function formatDateTime(timestamp) {
+            const date = new Date(timestamp);
+            return date.toLocaleString();
         }
     </script>
 </body>
