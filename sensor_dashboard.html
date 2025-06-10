@@ -705,23 +705,102 @@
                     charts[sensor].destroy();
                 }
                 
-                charts[sensor] = new Chart(ctx, {
-                    type: config.type,
+                // 온도/습도 복합 차트 생성
+                if (sensor === 'temperature') {
+                    charts[sensor] = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: timeLabels,
+                            datasets: [
+                                {
+                                    label: '온도 (°C)',
+                                    data: data.history.temperature,
+                                    borderColor: '#FF6384',
+                                    backgroundColor: 'transparent',
+                                    borderWidth: 2,
+                                    tension: 0.4,
+                                    yAxisID: 'y'
+                                },
+                                {
+                                    label: '습도 (%)',
+                                    data: data.history.humidity,
+                                    borderColor: '#36A2EB',
+                                    backgroundColor: 'transparent',
+                                    borderWidth: 2,
+                                    tension: 0.4,
+                                    yAxisID: 'y1'
+                                }
+                            ]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            scales: {
+                                x: { display: false },
+                                y: {
+                                    type: 'linear',
+                                    position: 'left',
+                                    title: { display: true, text: '온도 (°C)' },
+                                    grid: { borderDash: [2, 2] }
+                                },
+                                y1: {
+                                    type: 'linear',
+                                    position: 'right',
+                                    title: { display: true, text: '습도 (%)' },
+                                    grid: { display: false }
+                                }
+                            },
+                            plugins: {
+                                legend: { display: true, position: 'top' },
+                                title: { display: true, text: '온도 & 습도', font: { size: 12 } }
+                            }
+                        }
+                    });
+                } else if (sensor !== 'humidity') {
+                    // 습도는 온도 차트에 포함되므로 별도 생성하지 않음
+                    charts[sensor] = new Chart(ctx, {
+                        type: config.type,
+                        data: {
+                            labels: timeLabels,
+                            datasets: [{
+                                label: config.label,
+                                data: config.data,
+                                borderColor: config.color,
+                                backgroundColor: config.type === 'bar' 
+                                    ? config.color + 'B3'  // 70% opacity
+                                    : config.color + '1A', // 10% opacity
+                                tension: 0.4,
+                                fill: config.type !== 'bar'
+                            }]
+                        },
+                        options: getChartOptions(config.label)
+                    });
+                }
+            }
+            
+            // 공기질 차트 별도 생성
+            const airQualityCtx = document.getElementById('airqualityChart');
+            if (airQualityCtx) {
+                if (charts.airquality) {
+                    charts.airquality.destroy();
+                }
+                
+                charts.airquality = new Chart(airQualityCtx.getContext('2d'), {
+                    type: 'line',
                     data: {
                         labels: timeLabels,
                         datasets: [{
-                            label: config.label,
-                            data: config.data,
-                            borderColor: config.color,
-                            backgroundColor: config.type === 'bar' 
-                                ? config.color + 'B3'  // 70% opacity
-                                : config.color + '1A', // 10% opacity
-                            tension: 0.4,
-                            fill: config.type !== 'bar'
+                            label: '공기질 (/100)',
+                            data: Array(timeLabels.length).fill(extendedSensorData.air_quality || 0),
+                            borderColor: '#00d084',
+                            backgroundColor: 'transparent',
+                            borderWidth: 2,
+                            tension: 0.4
                         }]
                     },
-                    options: getChartOptions(config.label)
+                    options: getChartOptions('공기질 (/100)')
                 });
+            }
             }
 
             // 통합 차트 생성
@@ -822,12 +901,20 @@
             const timeLabels = data.history.timestamps.map(ts => formatTime(ts));
             
             // 개별 차트 업데이트
-            const sensors = ['temperature', 'humidity', 'light', 'pressure', 'vibration'];
+            const sensors = ['temperature', 'light', 'pressure', 'vibration'];
             
             sensors.forEach(sensor => {
                 if (charts[sensor]) {
                     charts[sensor].data.labels = timeLabels;
-                    charts[sensor].data.datasets[0].data = data.history[sensor];
+                    
+                    if (sensor === 'temperature') {
+                        // 온도/습도 복합 차트 업데이트
+                        charts[sensor].data.datasets[0].data = data.history.temperature;
+                        charts[sensor].data.datasets[1].data = data.history.humidity;
+                    } else {
+                        // 다른 센서들
+                        charts[sensor].data.datasets[0].data = data.history[sensor];
+                    }
                     charts[sensor].update();
                 }
             });

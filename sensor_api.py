@@ -36,6 +36,7 @@ def generate_sensor_data():
         try:
             # 실제 센서 데이터 읽기
             sensor_data = sensor_manager.read_all_sensors()
+            print(f"DEBUG: 실제 센서 데이터 - 온도: {sensor_data['temperature']}, 조도: {sensor_data['light']}")
             return {
                 'temperature': sensor_data['temperature'],
                 'humidity': sensor_data['humidity'],
