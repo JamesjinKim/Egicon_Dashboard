@@ -888,77 +888,24 @@
                         charts[sensor].destroy();
                     }
                     
-                    // 온도/습도 복합 차트 생성
-                    if (sensor === 'temperature') {
-                        charts[sensor] = new Chart(ctx.getContext('2d'), {
-                            type: 'line',
-                            data: {
-                                labels: timeLabels,
-                                datasets: [
-                                    {
-                                        label: '온도 (°C)',
-                                        data: dummyHistory.temperature,
-                                        borderColor: '#FF6384',
-                                        backgroundColor: 'transparent',
-                                        borderWidth: 2,
-                                        tension: 0.4,
-                                        yAxisID: 'y'
-                                    },
-                                    {
-                                        label: '습도 (%)',
-                                        data: dummyHistory.humidity,
-                                        borderColor: '#36A2EB',
-                                        backgroundColor: 'transparent',
-                                        borderWidth: 2,
-                                        tension: 0.4,
-                                        yAxisID: 'y1'
-                                    }
-                                ]
-                            },
-                            options: {
-                                responsive: true,
-                                maintainAspectRatio: false,
-                                scales: {
-                                    x: { display: false },
-                                    y: {
-                                        type: 'linear',
-                                        position: 'left',
-                                        title: { display: true, text: '온도 (°C)' },
-                                        grid: { borderDash: [2, 2] }
-                                    },
-                                    y1: {
-                                        type: 'linear',
-                                        position: 'right',
-                                        title: { display: true, text: '습도 (%)' },
-                                        grid: { display: false }
-                                    }
-                                },
-                                plugins: {
-                                    legend: { display: true, position: 'top' },
-                                    title: { display: true, text: '온도 & 습도', font: { size: 12 } }
-                                }
-                            }
-                        });
-                    } else if (sensor !== 'humidity') {
-                        // 습도는 온도 차트에 포함되므로 별도 생성하지 않음
-                        charts[sensor] = new Chart(ctx.getContext('2d'), {
-                            type: config.type,
-                            data: {
-                                labels: timeLabels,
-                                datasets: [{
-                                    label: config.label,
-                                    data: config.data,
-                                    borderColor: config.color,
-                                    backgroundColor: config.type === 'bar' 
-                                        ? config.color + 'B3'  // 70% opacity
-                                        : config.color + '1A', // 10% opacity
-                                    tension: 0.4,
-                                    fill: config.type !== 'bar'
-                                }]
-                            },
-                            options: getChartOptions(config.label)
-                        });
-                    }
+                    // 각 센서별 독립 차트 생성
+                    charts[sensor] = new Chart(ctx.getContext('2d'), {
+                        type: config.type,
+                        data: {
+                            labels: timeLabels,
+                            datasets: [{
+                                label: config.label,
+                                data: config.data,
+                                borderColor: config.color,
+                                backgroundColor: config.type === 'bar' 
+                                    ? config.color + 'B3'  // 70% opacity
+                                    : config.color + '1A', // 10% opacity
+                                tension: 0.4,
+                                fill: config.type !== 'bar'
+                            }]
+                        },
+                        options: getChartOptions(config.label)
+                    });
                 }
             }
             
