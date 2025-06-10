@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>EZ-Dash 심플 센서 대시보드</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -56,6 +57,7 @@
             transition: transform 0.3s ease, box-shadow 0.3s ease;
             position: relative;
             overflow: hidden;
+            min-height: 280px;
         }
 
         .sensor-card:hover {
@@ -116,6 +118,16 @@
             color: #888;
             border-top: 1px solid #eee;
             padding-top: 15px;
+            margin-bottom: 15px;
+        }
+
+        .sensor-chart {
+            height: 80px;
+            margin-top: 15px;
+        }
+
+        .sensor-chart canvas {
+            max-height: 80px !important;
         }
 
         /* 센서별 색상 */
@@ -216,6 +228,9 @@
                 <span class="sensor-unit">°C</span>
             </div>
             <div class="sensor-info" id="temperature-info">BME688 센서</div>
+            <div class="sensor-chart">
+                <canvas id="temperature-chart"></canvas>
+            </div>
         </div>
 
         <!-- 습도 센서 -->
@@ -231,6 +246,9 @@
                 <span class="sensor-unit">%</span>
             </div>
             <div class="sensor-info" id="humidity-info">BME688 센서</div>
+            <div class="sensor-chart">
+                <canvas id="humidity-chart"></canvas>
+            </div>
         </div>
 
         <!-- 조도 센서 -->
@@ -246,6 +264,9 @@
                 <span class="sensor-unit">lux</span>
             </div>
             <div class="sensor-info" id="light-info">BH1750 센서</div>
+            <div class="sensor-chart">
+                <canvas id="light-chart"></canvas>
+            </div>
         </div>
 
         <!-- 차압 센서 -->
@@ -261,6 +282,9 @@
                 <span class="sensor-unit">Pa</span>
             </div>
             <div class="sensor-info" id="pressure-info">BME688 기준 대기압 변환</div>
+            <div class="sensor-chart">
+                <canvas id="pressure-chart"></canvas>
+            </div>
         </div>
 
         <!-- 진동 센서 -->
@@ -276,6 +300,9 @@
                 <span class="sensor-unit">g</span>
             </div>
             <div class="sensor-info" id="vibration-info">시간대별 가상 센서</div>
+            <div class="sensor-chart">
+                <canvas id="vibration-chart"></canvas>
+            </div>
         </div>
 
         <!-- 공기질 센서 -->
@@ -291,6 +318,9 @@
                 <span class="sensor-unit">/100</span>
             </div>
             <div class="sensor-info" id="air-quality-info">BME688 가스 저항 기반</div>
+            <div class="sensor-chart">
+                <canvas id="air-quality-chart"></canvas>
+            </div>
         </div>
     </div>
 
@@ -304,10 +334,29 @@
         
         let updateInterval;
         let isUpdating = false;
+        
+        // 차트 객체 저장
+        const charts = {};
+        
+        // 센서 데이터 히스토리 (최근 10개 포인트)
+        const sensorHistory = {
+            temperature: [],
+            humidity: [],
+            light: [],
+            pressure: [],
+            vibration: [],
+            airQuality: [],
+            timestamps: []
+        };
+        
+        const MAX_HISTORY_POINTS = 10;
 
         // 페이지 로드 시 초기화
         document.addEventListener('DOMContentLoaded', function() {
             console.log('EZ-Dash 심플 대시보드 시작');
+            
+            // 차트 초기화
+            initializeCharts();
             
             // 초기 데이터 로드
             updateSensorData();
@@ -347,9 +396,15 @@
                 const statusResponse = await fetch(`${API_BASE}/status`);
                 const statusData = await statusResponse.json();
                 
+                // 히스토리 데이터 추가
+                addToHistory(data);
+                
                 // UI 업데이트
                 updateSensorDisplay(data);
                 updateStatus(statusData, data.timestamp);
+                
+                // 차트 업데이트
+                updateAllCharts();
                 
                 console.log('센서 데이터 업데이트 완료:', data);
                 
@@ -435,6 +490,108 @@
                 statusText.textContent = statusData.error ? `오류: ${statusData.error}` : '센서 연결 안됨';
                 lastUpdate.textContent = '';
             }
+        }
+
+        // 차트 초기화
+        function initializeCharts() {
+            const chartConfigs = [
+                { id: 'temperature-chart', color: '#ff6b6b', type: 'line' },
+                { id: 'humidity-chart', color: '#4ecdc4', type: 'line' },
+                { id: 'light-chart', color: '#ffe66d', type: 'bar' },
+                { id: 'pressure-chart', color: '#a8e6cf', type: 'line' },
+                { id: 'vibration-chart', color: '#ff8b94', type: 'bar' },
+                { id: 'air-quality-chart', color: '#88d8b0', type: 'line' }
+            ];
+
+            chartConfigs.forEach(config => {
+                const ctx = document.getElementById(config.id);
+                if (ctx) {
+                    charts[config.id] = new Chart(ctx.getContext('2d'), {
+                        type: config.type,
+                        data: {
+                            labels: Array(MAX_HISTORY_POINTS).fill(''),
+                            datasets: [{
+                                data: Array(MAX_HISTORY_POINTS).fill(null),
+                                borderColor: config.color,
+                                backgroundColor: config.type === 'bar' 
+                                    ? config.color + '80'  // 50% 투명도
+                                    : 'transparent',
+                                borderWidth: 2,
+                                pointRadius: 2,
+                                pointHoverRadius: 4,
+                                tension: 0.4,
+                                fill: false
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: { display: false },
+                                tooltip: { enabled: false }
+                            },
+                            scales: {
+                                x: { display: false },
+                                y: { 
+                                    display: false,
+                                    beginAtZero: false
+                                }
+                            },
+                            elements: {
+                                point: { radius: 0 }
+                            },
+                            animation: {
+                                duration: 500
+                            }
+                        }
+                    });
+                }
+            });
+        }
+
+        // 히스토리 데이터에 새 값 추가
+        function addToHistory(data) {
+            // 타임스탬프 추가
+            const timeLabel = new Date(data.timestamp).toLocaleTimeString('ko-KR', {
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+            
+            sensorHistory.timestamps.push(timeLabel);
+            sensorHistory.temperature.push(data.temperature);
+            sensorHistory.humidity.push(data.humidity);
+            sensorHistory.light.push(data.light);
+            sensorHistory.pressure.push(data.pressure);
+            sensorHistory.vibration.push(data.vibration);
+            sensorHistory.airQuality.push(data.air_quality);
+
+            // 최대 포인트 수 제한
+            Object.keys(sensorHistory).forEach(key => {
+                if (sensorHistory[key].length > MAX_HISTORY_POINTS) {
+                    sensorHistory[key].shift();
+                }
+            });
+        }
+
+        // 모든 차트 업데이트
+        function updateAllCharts() {
+            const chartMappings = [
+                { id: 'temperature-chart', data: sensorHistory.temperature },
+                { id: 'humidity-chart', data: sensorHistory.humidity },
+                { id: 'light-chart', data: sensorHistory.light },
+                { id: 'pressure-chart', data: sensorHistory.pressure },
+                { id: 'vibration-chart', data: sensorHistory.vibration },
+                { id: 'air-quality-chart', data: sensorHistory.airQuality }
+            ];
+
+            chartMappings.forEach(mapping => {
+                const chart = charts[mapping.id];
+                if (chart) {
+                    chart.data.labels = [...sensorHistory.timestamps];
+                    chart.data.datasets[0].data = [...mapping.data];
+                    chart.update('none'); // 애니메이션 없이 빠른 업데이트
+                }
+            });
         }
 
         // 에러 처리 함수
