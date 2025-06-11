@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}센서 대시보드{% endblock %}</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    {% block styles %}{% endblock %}
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+</head>
+<body>
+    <!-- 로딩 오버레이 -->
+    <div class="loading-overlay" id="loading-overlay" style="display: none;">
+        <div class="loading-spinner"></div>
+    </div>
+
+    <!-- 사이드바 -->
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <button class="sidebar-toggle" id="sidebar-toggle">
+                <i class="fas fa-bars"></i>
+            </button>
+            <h2>센서 대시보드</h2>
+        </div>
+        <div class="sidebar-menu">
+            <a href="{{ url_for('index') }}" class="menu-item {% if request.endpoint == 'index' %}active{% endif %}">
+                <i class="fas fa-home"></i>
+                <span>대시보드</span>
+            </a>
+            <a href="#" class="menu-item">
+                <i class="fas fa-thermometer-half"></i>
+                <span>온도 센서</span>
+            </a>
+            <a href="#" class="menu-item">
+                <i class="fas fa-tint"></i>
+                <span>습도 센서</span>
+            </a>
+            <a href="#" class="menu-item">
+                <i class="fas fa-sun"></i>
+                <span>조도 센서</span>
+            </a>
+            <a href="#" class="menu-item">
+                <i class="fas fa-compress-alt"></i>
+                <span>차압 센서</span>
+            </a>
+            <a href="#" class="menu-item">
+                <i class="fas fa-wave-square"></i>
+                <span>진동 센서</span>
+            </a>
+            <a href="#" class="menu-item">
+                <i class="fas fa-leaf"></i>
+                <span>공기질 센서</span>
+            </a>
+            <a href="#" class="menu-item">
+                <i class="fas fa-cog"></i>
+                <span>설정</span>
+            </a>
+            <a href="#" class="menu-item" id="refresh-data">
+                <i class="fas fa-sync-alt"></i>
+                <span>데이터 갱신</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- 메인 콘텐츠 -->
+    <div class="main-content" id="main-content">
+        <div class="header">
+            <h1>{% block header_title %}EG-icon 센서 대시보드{% endblock %}</h1>
+            <div class="user-info">
+                <div class="user-details">
+                    <span class="user-name">ShinHoTechnology</span>
+                    <span class="user-role">관리자</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 상태 정보 표시 -->
+        <div class="status-bar">
+            <div class="status-item">
+                <i class="fas fa-clock"></i>
+                <span id="last-update">마지막 업데이트: 로딩 중...</span>
+            </div>
+            <div class="status-item">
+                <i class="fas fa-database"></i>
+                <span id="db-status">데이터베이스 상태: 연결 중...</span>
+            </div>
+        </div>
+
+        {% block content %}{% endblock %}
+    </div>
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>

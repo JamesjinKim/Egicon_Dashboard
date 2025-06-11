@@ -15,7 +15,6 @@ import constants as const
 
 class BH1750Sensor:
     """BH1750 조도 센서 클래스"""
-    
     # BH1750 주소 및 명령어
     DEVICE_ADDRESS = 0x23
     POWER_DOWN = 0x00

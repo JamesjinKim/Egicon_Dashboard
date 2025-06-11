@@ -6,12 +6,12 @@ EZ-Dash 심플 센서 API 서버
 - 단순한 구조로 최적화
 """
 
-from flask import Flask, jsonify, send_from_directory
+from flask import Flask, jsonify, render_template
 from flask_cors import CORS
 from datetime import datetime
 from sensor_manager import SensorManager
 
-app = Flask(__name__, static_folder='.')
+app = Flask(__name__)
 CORS(app)
 
 # 전역 센서 매니저
@@ -36,7 +36,12 @@ def initialize_sensors():
 @app.route('/')
 def index():
     """메인 대시보드 페이지"""
-    return send_from_directory('.', 'dashboard_simple.html')
+    return render_template('pages/dashboard.html')
+
+@app.route('/dashboard')
+def dashboard():
+    """대시보드 페이지 (별칭)"""
+    return render_template('pages/dashboard.html')
 
 @app.route('/api/current', methods=['GET'])
 def get_current_data():

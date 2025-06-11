@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>센서 대시보드</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+</head>
+<body>
+    <!-- 로딩 오버레이 -->
+    <div class="loading-overlay" id="loading-overlay" style="display: none;">
+        <div class="loading-spinner"></div>
+    </div>
+
+    <!-- 사이드바 -->
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <button class="sidebar-toggle" id="sidebar-toggle">
+                <i class="fas fa-bars"></i>
+            </button>
+            <h2>센서 대시보드</h2>
+        </div>
+        <div class="sidebar-menu">
+            <a href="#" class="menu-item active">
+                <i class="fas fa-home"></i>
+                <span>대시보드</span>
+            </a>
+            <a href="#" class="menu-item">
+                <i class="fas fa-thermometer-half"></i>
+                <span>온도 센서</span>
+            </a>
+            <a href="#" class="menu-item">
+                <i class="fas fa-tint"></i>
+                <span>습도 센서</span>
+            </a>
+            <a href="#" class="menu-item">
+                <i class="fas fa-sun"></i>
+                <span>조도 센서</span>
+            </a>
+            <a href="#" class="menu-item">
+                <i class="fas fa-compress-alt"></i>
+                <span>차압 센서</span>
+            </a>
+            <a href="#" class="menu-item">
+                <i class="fas fa-wave-square"></i>
+                <span>진동 센서</span>
+            </a>
+            <a href="#" class="menu-item">
+                <i class="fas fa-leaf"></i>
+                <span>공기질 센서</span>
+            </a>
+            <a href="#" class="menu-item">
+                <i class="fas fa-cog"></i>
+                <span>설정</span>
+            </a>
+            <a href="#" class="menu-item" id="refresh-data">
+                <i class="fas fa-sync-alt"></i>
+                <span>데이터 갱신</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- 메인 콘텐츠 -->
+    <div class="main-content" id="main-content">
+        <div class="header">
+            <h1>EG-icon 센서 대시보드</h1>
+            <div class="user-info">
+                <div class="user-details">
+                    <span class="user-name">ShinHoTechnology</span>
+                    <span class="user-role">관리자</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 상태 정보 표시 -->
+        <div class="status-bar">
+            <div class="status-item">
+                <i class="fas fa-clock"></i>
+                <span id="last-update">마지막 업데이트: 로딩 중...</span>
+            </div>
+            <div class="status-item">
+                <i class="fas fa-database"></i>
+                <span id="db-status">데이터베이스 상태: 연결 중...</span>
+            </div>
+        </div>
+
+        <!-- 센서 위젯 섹션 -->
+        <div class="sensor-widgets-container">
+            <!-- 온도 센서 위젯 -->
+            <div class="sensor-widget temperature">
+                <div class="widget-color-bar"></div>
+                <div class="widget-content">
+                    <div class="widget-icon">
+                        <i class="fas fa-thermometer-half"></i>
+                    </div>
+                    <div class="widget-title">TEMPERATURE</div>
+                    <div class="widget-value" id="temp-value">--<span class="widget-unit">°C</span></div>
+                </div>
+            </div>
+
+            <!-- 습도 센서 위젯 -->
+            <div class="sensor-widget humidity">
+                <div class="widget-color-bar"></div>
+                <div class="widget-content">
+                    <div class="widget-icon">
+                        <i class="fas fa-tint"></i>
+                    </div>
+                    <div class="widget-title">HUMIDITY</div>
+                    <div class="widget-value" id="humidity-value">--<span class="widget-unit">%</span></div>
+                </div>
+            </div>
+
+            <!-- 조도 센서 위젯 -->
+            <div class="sensor-widget light">
+                <div class="widget-color-bar"></div>
+                <div class="widget-content">
+                    <div class="widget-icon">
+                        <i class="fas fa-sun"></i>
+                    </div>
+                    <div class="widget-title">LIGHT</div>
+                    <div class="widget-value" id="light-value">--<span class="widget-unit">lux</span></div>
+                </div>
+            </div>
+
+            <!-- 차압 센서 위젯 -->
+            <div class="sensor-widget pressure">
+                <div class="widget-color-bar"></div>
+                <div class="widget-content">
+                    <div class="widget-icon">
+                        <i class="fas fa-compress-alt"></i>
+                    </div>
+                    <div class="widget-title">PRESSURE</div>
+                    <div class="widget-value" id="pressure-value">--<span class="widget-unit">Pa</span></div>
+                </div>
+            </div>
+
+            <!-- 진동 센서 위젯 -->
+            <div class="sensor-widget vibration">
+                <div class="widget-color-bar"></div>
+                <div class="widget-content">
+                    <div class="widget-icon">
+                        <i class="fas fa-wave-square"></i>
+                    </div>
+                    <div class="widget-title">VIBRATION</div>
+                    <div class="widget-value" id="vibration-value">--<span class="widget-unit">g</span></div>
+                </div>
+            </div>
+
+            <!-- 공기질 센서 위젯 -->
+            <div class="sensor-widget airquality">
+                <div class="widget-color-bar"></div>
+                <div class="widget-content">
+                    <div class="widget-icon">
+                        <i class="fas fa-leaf"></i>
+                    </div>
+                    <div class="widget-title">AIR QUALITY</div>
+                    <div class="widget-value" id="airquality-value">--<span class="widget-unit">/100</span></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="dashboard-container">
+            <!-- 온도 센서 카드 -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">온도 센서</div>
+                    <div class="card-icon">
+                        <i class="fas fa-thermometer-half"></i>
+                    </div>
+                </div>
+                <div class="sensor-value" id="temp-card-value">--<span class="sensor-unit">°C</span></div>
+                <div class="chart-container">
+                    <canvas id="temperatureChart"></canvas>
+                </div>
+            </div>
+
+            <!-- 습도 센서 카드 -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">습도 센서</div>
+                    <div class="card-icon">
+                        <i class="fas fa-tint"></i>
+                    </div>
+                </div>
+                <div class="sensor-value" id="humidity-card-value">--<span class="sensor-unit">%</span></div>
+                <div class="chart-container">
+                    <canvas id="humidityChart"></canvas>
+                </div>
+            </div>
+
+            <!-- 조도 센서 카드 -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">조도 센서</div>
+                    <div class="card-icon">
+                        <i class="fas fa-sun"></i>
+                    </div>
+                </div>
+                <div class="sensor-value" id="light-card-value">--<span class="sensor-unit">lux</span></div>
+                <div class="chart-container">
+                    <canvas id="lightChart"></canvas>
+                </div>
+            </div>
+
+            <!-- 차압 센서 카드 -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">차압 센서</div>
+                    <div class="card-icon">
+                        <i class="fas fa-compress-alt"></i>
+                    </div>
+                </div>
+                <div class="sensor-value" id="pressure-card-value">--<span class="sensor-unit">Pa</span></div>
+                <div class="chart-container">
+                    <canvas id="pressureChart"></canvas>
+                </div>
+            </div>
+
+            <!-- 진동 센서 카드 -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">진동 센서</div>
+                    <div class="card-icon">
+                        <i class="fas fa-wave-square"></i>
+                    </div>
+                </div>
+                <div class="sensor-value" id="vibration-card-value">--<span class="sensor-unit">g</span></div>
+                <div class="chart-container">
+                    <canvas id="vibrationChart"></canvas>
+                </div>
+            </div>
+
+            <!-- 공기질 센서 카드 -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">공기질 센서</div>
+                    <div class="card-icon">
+                        <i class="fas fa-leaf"></i>
+                    </div>
+                </div>
+                <div class="sensor-value" id="airquality-card-value">--<span class="sensor-unit">/100</span></div>
+                <div class="chart-container">
+                    <canvas id="airqualityChart"></canvas>
+                </div>
+            </div>
+
+            <!-- 대형 차트 (모든 센서 통합) -->
+            <div class="card large-chart">
+                <div class="card-header">
+                    <div class="card-title">통합 센서 데이터</div>
+                    <div class="card-icon">
+                        <i class="fas fa-chart-line"></i>
+                    </div>
+                </div>
+                <div class="chart-container" style="height: 300px;">
+                    <canvas id="combinedChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>
