@@ -1,0 +1,237 @@
+{% extends "base.html" %}
+
+{% block title %}설정 - 센서 대시보드{% endblock %}
+
+{% block content %}
+    <!-- 설정 페이지 컨테이너 -->
+    <div class="settings-container">
+        <!-- 페이지 헤더 -->
+        <div class="settings-header">
+            <h2><i class="fas fa-cogs"></i> 디바이스 설정</h2>
+            <p>I2C 센서 스캔 및 디바이스 관리</p>
+        </div>
+
+        <!-- I2C 스캔 섹션 -->
+        <div class="card scan-section">
+            <div class="card-header">
+                <div class="card-title">
+                    <i class="fas fa-search"></i> I2C 디바이스 스캔
+                </div>
+                <button id="scan-button" class="scan-btn">
+                    <i class="fas fa-sync-alt"></i> 스캔 시작
+                </button>
+            </div>
+            
+            <!-- 스캔 진행률 -->
+            <div class="scan-progress-container" id="scan-progress-container" style="display: none;">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="scan-progress-fill"></div>
+                </div>
+                <div class="progress-text" id="scan-progress-text">준비 중...</div>
+            </div>
+            
+            <!-- 스캔 결과 테이블 -->
+            <div class="scan-results">
+                <h4>스캔 결과</h4>
+                <div class="table-container">
+                    <table class="scan-table" id="scan-results-table">
+                        <thead>
+                            <tr>
+                                <th>버스</th>
+                                <th>주소</th>
+                                <th>센서명</th>
+                                <th>타입</th>
+                                <th>상태</th>
+                                <th>액션</th>
+                            </tr>
+                        </thead>
+                        <tbody id="scan-results-body">
+                            <tr class="no-results">
+                                <td colspan="6">스캔을 실행하여 연결된 디바이스를 확인하세요</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 등록된 센서 목록 섹션 -->
+        <div class="card sensors-section">
+            <div class="card-header">
+                <div class="card-title">
+                    <i class="fas fa-microchip"></i> 등록된 센서 목록
+                </div>
+                <button id="refresh-sensors-button" class="refresh-btn">
+                    <i class="fas fa-refresh"></i> 새로고침
+                </button>
+            </div>
+            
+            <div class="sensors-stats" id="sensors-stats">
+                <div class="stat-item">
+                    <span class="stat-label">총 센서:</span>
+                    <span class="stat-value" id="total-sensors">-</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">연결됨:</span>
+                    <span class="stat-value connected" id="connected-sensors">-</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">미등록:</span>
+                    <span class="stat-value unknown" id="unknown-sensors">-</span>
+                </div>
+            </div>
+            
+            <div class="table-container">
+                <table class="sensors-table" id="sensors-table">
+                    <thead>
+                        <tr>
+                            <th>주소</th>
+                            <th>센서명</th>
+                            <th>타입</th>
+                            <th>설명</th>
+                            <th>전압</th>
+                            <th>연결상태</th>
+                            <th>액션</th>
+                        </tr>
+                    </thead>
+                    <tbody id="sensors-table-body">
+                        <tr class="loading">
+                            <td colspan="7">센서 목록을 불러오는 중...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 새 센서 등록 섹션 -->
+        <div class="card register-section">
+            <div class="card-header">
+                <div class="card-title">
+                    <i class="fas fa-plus-circle"></i> 새 센서 등록
+                </div>
+            </div>
+            
+            <form id="register-sensor-form" class="sensor-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="sensor-address">I2C 주소</label>
+                        <select id="sensor-address" name="address" required>
+                            <option value="">주소 선택...</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="sensor-name">센서명</label>
+                        <input type="text" id="sensor-name" name="name" placeholder="예: MY_SENSOR" required>
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="sensor-type">센서 타입</label>
+                        <input type="text" id="sensor-type" name="type" placeholder="예: 온도센서" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="sensor-voltage">전압</label>
+                        <select id="sensor-voltage" name="voltage" required>
+                            <option value="3.3V">3.3V</option>
+                            <option value="5V">5V</option>
+                            <option value="3.3V/5V">3.3V/5V</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="sensor-description">설명</label>
+                    <textarea id="sensor-description" name="description" placeholder="센서에 대한 설명을 입력하세요..." rows="3"></textarea>
+                </div>
+                
+                <div class="form-actions">
+                    <button type="submit" class="register-btn">
+                        <i class="fas fa-plus"></i> 센서 등록
+                    </button>
+                    <button type="reset" class="reset-btn">
+                        <i class="fas fa-undo"></i> 초기화
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 센서 테스트 모달 -->
+    <div id="test-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-vial"></i> 센서 테스트 결과</h3>
+                <span class="close" id="test-modal-close">&times;</span>
+            </div>
+            <div class="modal-body" id="test-modal-body">
+                <div class="loading-spinner">
+                    <i class="fas fa-spinner fa-spin"></i> 테스트 중...
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 센서 편집 모달 -->
+    <div id="edit-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-edit"></i> 센서 정보 수정</h3>
+                <span class="close" id="edit-modal-close">&times;</span>
+            </div>
+            <div class="modal-body">
+                <form id="edit-sensor-form" class="sensor-form">
+                    <input type="hidden" id="edit-sensor-id" name="id">
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="edit-sensor-name">센서명</label>
+                            <input type="text" id="edit-sensor-name" name="name" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="edit-sensor-type">센서 타입</label>
+                            <input type="text" id="edit-sensor-type" name="type" required>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="edit-sensor-voltage">전압</label>
+                            <select id="edit-sensor-voltage" name="voltage" required>
+                                <option value="3.3V">3.3V</option>
+                                <option value="5V">5V</option>
+                                <option value="3.3V/5V">3.3V/5V</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="edit-sensor-description">설명</label>
+                        <textarea id="edit-sensor-description" name="description" rows="3"></textarea>
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button type="submit" class="save-btn">
+                            <i class="fas fa-save"></i> 저장
+                        </button>
+                        <button type="button" class="cancel-btn" id="edit-cancel-btn">
+                            <i class="fas fa-times"></i> 취소
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- 알림 토스트 -->
+    <div id="toast" class="toast">
+        <div class="toast-content" id="toast-content">
+            <i class="fas fa-info-circle"></i>
+            <span id="toast-message">알림 메시지</span>
+        </div>
+    </div>
+{% endblock %}
+
+{% block scripts %}
+    <script src="{{ url_for('static', filename='js/settings.js') }}"></script>
+{% endblock %}

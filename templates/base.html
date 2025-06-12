@@ -52,7 +52,7 @@
                 <i class="fas fa-leaf"></i>
                 <span>공기질 센서</span>
             </a>
-            <a href="#" class="menu-item">
+            <a href="{{ url_for('settings') }}" class="menu-item {% if request.endpoint == 'settings' %}active{% endif %}">
                 <i class="fas fa-cog"></i>
                 <span>설정</span>
             </a>

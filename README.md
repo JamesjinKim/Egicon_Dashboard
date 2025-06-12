@@ -1,4 +1,4 @@
-# 🚀 EZ-Dash 실시간 센서 대시보드
+# 🚀 EG-Dash 실시간 센서 대시보드
 
 **라즈베리파이 4 기반 실시간 센서 모니터링 시스템**
 
@@ -42,7 +42,7 @@ BME688 + BH1750 실제 센서를 사용한 온도, 습도, 압력, 조도, 공�
 ## 📁 프로젝트 구조
 
 ```
-ezdash/
+egdash/
 ├── 📄 sensor_api_simple.py    # 메인 API 서버 (포트 5002)
 ├── 🔧 sensor_manager.py       # 센서 관리 클래스 (BME688 + BH1750)
 ├── 📝 constants.py            # BME688 센서 상수 정의
