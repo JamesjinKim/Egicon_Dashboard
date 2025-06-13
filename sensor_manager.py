@@ -195,6 +195,111 @@ class BME688Sensor:
             return max(0, int(gas_resistance / 500))
 
 
+class SHT40Sensor:
+    """SHT40 온습도센서 클래스"""
+    
+    # SHT40 명령어
+    CMD_MEASURE_HIGH_PRECISION = 0xFD
+    CMD_SOFT_RESET = 0x94
+    
+    def __init__(self, bus, address=0x44):
+        self.bus = bus
+        self.address = address
+        self.connected = False
+        
+        # 연결 테스트 및 초기화
+        self.connected = self._initialize()
+    
+    def _initialize(self):
+        """SHT40 센서 초기화"""
+        try:
+            # 소프트 리셋으로 연결 확인
+            write_msg = smbus2.i2c_msg.write(self.address, [self.CMD_SOFT_RESET])
+            self.bus.i2c_rdwr(write_msg)
+            time.sleep(0.01)
+            
+            # 측정 명령 테스트
+            write_msg = smbus2.i2c_msg.write(self.address, [self.CMD_MEASURE_HIGH_PRECISION])
+            self.bus.i2c_rdwr(write_msg)
+            time.sleep(0.02)
+            
+            # 데이터 읽기 테스트
+            read_msg = smbus2.i2c_msg.read(self.address, 6)
+            self.bus.i2c_rdwr(read_msg)
+            
+            print(f"✅ SHT40 센서 초기화 완료 (주소: 0x{self.address:02X})")
+            return True
+            
+        except Exception as e:
+            print(f"❌ SHT40 초기화 실패: {e}")
+            return False
+    
+    def _calculate_crc(self, data):
+        """CRC-8 체크섬 계산"""
+        POLYNOMIAL = 0x31
+        CRC = 0xFF
+        for byte in data:
+            CRC ^= byte
+            for _ in range(8):
+                if CRC & 0x80:
+                    CRC = ((CRC << 1) ^ POLYNOMIAL) & 0xFF
+                else:
+                    CRC = (CRC << 1) & 0xFF
+        return CRC
+    
+    def read_data(self):
+        """온도와 습도 측정"""
+        if not self.connected:
+            return None
+            
+        try:
+            # 고정밀 측정 명령 전송
+            write_msg = smbus2.i2c_msg.write(self.address, [self.CMD_MEASURE_HIGH_PRECISION])
+            self.bus.i2c_rdwr(write_msg)
+            time.sleep(0.02)
+            
+            # 6바이트 데이터 읽기
+            read_msg = smbus2.i2c_msg.read(self.address, 6)
+            self.bus.i2c_rdwr(read_msg)
+            
+            # 읽은 데이터 처리
+            data = list(read_msg)
+            
+            if len(data) >= 6:
+                # 온도 및 습도 데이터 분리
+                t_data = [data[0], data[1]]
+                t_crc = data[2]
+                rh_data = [data[3], data[4]]
+                rh_crc = data[5]
+                
+                # CRC 검증
+                t_crc_ok = self._calculate_crc(t_data) == t_crc
+                rh_crc_ok = self._calculate_crc(rh_data) == rh_crc
+                
+                if not (t_crc_ok and rh_crc_ok):
+                    print("⚠️ SHT40 CRC 검증 실패")
+                
+                # 원시 데이터를 실제 값으로 변환
+                t_raw = (t_data[0] << 8) | t_data[1]
+                rh_raw = (rh_data[0] << 8) | rh_data[1]
+                
+                # 데이터시트의 변환 공식 적용
+                temperature = -45 + 175 * (t_raw / 65535.0)
+                humidity = -6 + 125 * (rh_raw / 65535.0)
+                humidity = max(0, min(100, humidity))  # 0-100% 범위 제한
+                
+                return {
+                    'temperature': temperature,
+                    'humidity': humidity
+                }
+            
+            return None
+            
+        except Exception as e:
+            print(f"❌ SHT40 데이터 읽기 실패: {e}")
+            return None
+
+
 class BH1750Sensor:
     """BH1750 조도센서 클래스"""
     
@@ -255,6 +360,7 @@ class SensorManager:
     def __init__(self):
         self.bme688 = None
         self.bh1750 = None
+        self.sht40 = None
         self.buses = {}
         
         print("🚀 센서 관리자 초기화 (라즈베리파이 전용)")
@@ -278,6 +384,12 @@ class SensorManager:
             print("❌ 사용 가능한 I2C 버스가 없습니다")
             return False
         
+        # SHT40 센서 검색 (우선순위 1)
+        print("🔍 SHT40 센서 검색 중...")
+        self.sht40 = self._find_sht40()
+        if self.sht40:
+            success_count += 1
+        
         # BME688 센서 검색
         print("🔍 BME688 센서 검색 중...")
         self.bme688 = self._find_bme688()
@@ -290,10 +402,25 @@ class SensorManager:
         if self.bh1750:
             success_count += 1
         
-        total_sensors = 2
+        total_sensors = 3
         print(f"📊 센서 초기화 완료: {success_count}/{total_sensors}개 센서 연결")
         
         return success_count > 0  # 하나라도 연결되면 성공
+    
+    def _find_sht40(self):
+        """온습도센서 (SHT40) 찾기"""
+        for bus_num, bus in self.buses.items():
+            for addr in [0x44, 0x45]:  # SHT40 일반적인 주소
+                try:
+                    sht40 = SHT40Sensor(bus, addr)
+                    if sht40.connected:
+                        print(f"✅ SHT40 센서 발견 (버스 {bus_num}, 주소 0x{addr:02X})")
+                        return sht40
+                except Exception as e:
+                    continue
+        
+        print("❌ SHT40 센서를 찾을 수 없습니다")
+        return None
     
     def _find_bme688(self):
         """BME688 센서 찾기"""
@@ -342,17 +469,28 @@ class SensorManager:
             'sensor_status': {
                 'bme688': self.bme688 is not None and self.bme688.connected,
                 'bh1750': self.bh1750 is not None and self.bh1750.connected,
-                'sht40': False,  # 추후 구현
+                'sht40': self.sht40 is not None and self.sht40.connected,
                 'sdp810': False  # 추후 구현
             }
         }
         
-        # BME688 데이터 읽기
+        # SHT40 데이터 읽기 (우선)
+        if self.sht40 and self.sht40.connected:
+            sht40_data = self.sht40.read_data()
+            if sht40_data:
+                result['temperature'] = sht40_data['temperature']
+                result['humidity'] = sht40_data['humidity']
+        
+        # BME688 데이터 읽기 (온도/습도가 없을 때만)
         if self.bme688 and self.bme688.connected:
             bme_data = self.bme688.read_data()
             if bme_data:
-                result['temperature'] = bme_data['temperature']
-                result['humidity'] = bme_data['humidity']
+                # SHT40 데이터가 없을 때만 BME688 온도/습도 사용
+                if result['temperature'] is None:
+                    result['temperature'] = bme_data['temperature']
+                if result['humidity'] is None:
+                    result['humidity'] = bme_data['humidity']
+                # BME688 고유 데이터는 항상 사용
                 result['pressure'] = bme_data['pressure']
                 result['gas_resistance'] = bme_data['gas_resistance']
                 result['air_quality'] = bme_data['air_quality']
@@ -368,13 +506,15 @@ class SensorManager:
     
     def get_sensor_status(self):
         """센서 연결 상태 반환"""
+        sht40_connected = self.sht40 is not None and self.sht40.connected
         bme688_connected = self.bme688 is not None and self.bme688.connected
         bh1750_connected = self.bh1750 is not None and self.bh1750.connected
         
         return {
+            'sht40_connected': sht40_connected,
             'bme688_connected': bme688_connected,
             'bh1750_connected': bh1750_connected,
-            'sensor_count': int(bme688_connected) + int(bh1750_connected)
+            'sensor_count': int(sht40_connected) + int(bme688_connected) + int(bh1750_connected)
         }
     
     def close_sensors(self):
@@ -388,6 +528,7 @@ class SensorManager:
                 pass
         
         self.buses.clear()
+        self.sht40 = None
         self.bme688 = None
         self.bh1750 = None
         
