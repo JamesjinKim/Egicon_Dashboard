@@ -122,6 +122,13 @@ class SensorDatabase:
                     # 이미 존재하는 주소는 무시
                     pass
             
+            # 기존 센서 중 기본 센서로 업데이트해야 할 항목들
+            cursor.execute('''
+                UPDATE sensors 
+                SET is_default = 1, name = ?, type = ?, description = ?, voltage = ?
+                WHERE address = 0x25 AND is_default = 0
+            ''', ("SDP810", "차압센서", "차압정보를 제공해 주는 센서", "3.3V"))
+            
             conn.commit()
     
     def get_all_sensors(self) -> List[Dict]:
