@@ -30,10 +30,9 @@ def initialize_sensors():
     print("센서 데이터베이스 초기화 중...")
     sensor_db = SensorDatabase()
     
-    # I2C 스캐너 초기화 (Mac 테스트용 모킹 모드 지원)
-    mock_mode = os.getenv('EZDASH_MOCK_MODE', 'false').lower() == 'true'
-    print(f"I2C 스캐너 초기화 중... (모킹 모드: {mock_mode})")
-    i2c_scanner = WebI2CScanner(mock_mode=mock_mode)
+    # I2C 스캐너 초기화 (라즈베리파이 전용)
+    print("I2C 스캐너 초기화 중...")
+    i2c_scanner = WebI2CScanner()
     
     # 센서 매니저 초기화
     print("실제 센서 연결 중...")
@@ -44,9 +43,9 @@ def initialize_sensors():
         print(f"센서 초기화 완료: {status['sensor_count']}/2개 센서 연결")
         return True
     else:
-        print("센서 연결 실패")
-        sensor_manager = None
-        return False
+        print("⚠️ 센서 연결 실패 - 데이터 없는 상태로 서비스 시작")
+        # sensor_manager를 None으로 설정하지 않고 유지
+        return True  # 서비스는 계속 시작
 
 @app.route('/')
 def index():
@@ -65,31 +64,67 @@ def settings():
 
 @app.route('/api/current', methods=['GET'])
 def get_current_data():
-    """현재 센서 데이터 조회"""
+    """현재 센서 데이터 조회 (센서 상태 포함)"""
     global sensor_manager
     
-    if not sensor_manager:
-        return jsonify({'error': '센서가 연결되지 않음'}), 500
-    
     try:
-        # 실제 센서 데이터 읽기
-        sensor_data = sensor_manager.read_all_sensors()
-        
-        return jsonify({
-            'timestamp': sensor_data['timestamp'],
-            'temperature': sensor_data['temperature'],
-            'humidity': sensor_data['humidity'],
-            'light': sensor_data['light'],
-            'pressure': sensor_data['pressure'],
-            'vibration': sensor_data['vibration'],
-            'gas_resistance': sensor_data['gas_resistance'],
-            'air_quality': sensor_data['air_quality'],
-            'absolute_pressure': sensor_data['absolute_pressure']
-        })
+        if sensor_manager:
+            # 실제 센서 데이터 읽기
+            sensor_data = sensor_manager.read_all_sensors()
+            
+            return jsonify({
+                'timestamp': sensor_data['timestamp'],
+                'temperature': sensor_data['temperature'],
+                'humidity': sensor_data['humidity'],
+                'light': sensor_data['light'],
+                'pressure': sensor_data['pressure'],
+                'vibration': sensor_data['vibration'],
+                'gas_resistance': sensor_data['gas_resistance'],
+                'air_quality': sensor_data['air_quality'],
+                'absolute_pressure': sensor_data['absolute_pressure'],
+                'sensor_status': sensor_data['sensor_status']
+            })
+        else:
+            # 센서 매니저가 없을 때 기본 응답
+            return jsonify({
+                'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                'temperature': None,
+                'humidity': None,
+                'light': None,
+                'pressure': None,
+                'vibration': 0.0,
+                'gas_resistance': None,
+                'air_quality': None,
+                'absolute_pressure': None,
+                'sensor_status': {
+                    'bme688': False,
+                    'bh1750': False,
+                    'sht40': False,
+                    'sdp810': False
+                }
+            })
         
     except Exception as e:
         print(f"센서 읽기 오류: {e}")
-        return jsonify({'error': f'센서 읽기 실패: {e}'}), 500
+        # 오류 발생 시도 기본 응답 반환
+        return jsonify({
+            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'temperature': None,
+            'humidity': None,
+            'light': None,
+            'pressure': None,
+            'vibration': 0.0,
+            'gas_resistance': None,
+            'air_quality': None,
+            'absolute_pressure': None,
+            'sensor_status': {
+                'bme688': False,
+                'bh1750': False,
+                'sht40': False,
+                'sdp810': False
+            },
+            'error': str(e)
+        })
 
 @app.route('/api/status', methods=['GET'])
 def get_sensor_status():

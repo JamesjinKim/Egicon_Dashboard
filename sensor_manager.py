@@ -1,651 +1,394 @@
 #!/usr/bin/env python3
 """
-EG-Dash 실제 센서 관리자
-- BME688: 온도, 습도, 압력, 가스저항
-- BH1750: 조도
-- 진동: 가상 센서 (시간대별 패턴)
+EG-Dash 센서 관리자 (라즈베리파이 전용)
+실제 I2C 센서만 지원, 더미 데이터 생성 제거
 """
 
 import time
-try:
-    import smbus2
-except ImportError:
-    smbus2 = None
+import smbus2
 import random
 import math
 from datetime import datetime
 import constants as const
 
-class BH1750Sensor:
-    """BH1750 조도 센서 클래스"""
-    # BH1750 주소 및 명령어
-    DEVICE_ADDRESS = 0x23
-    POWER_DOWN = 0x00
-    POWER_ON = 0x01
-    RESET = 0x07
-    CONTINUOUS_HIGH_RES_MODE = 0x10
-    CONTINUOUS_HIGH_RES_MODE_2 = 0x11
-    CONTINUOUS_LOW_RES_MODE = 0x13
-    ONE_TIME_HIGH_RES_MODE = 0x20
-    ONE_TIME_HIGH_RES_MODE_2 = 0x21
-    ONE_TIME_LOW_RES_MODE = 0x23
-    
-    def __init__(self, bus_number=1, address=0x23):
-        self.bus_number = bus_number
-        self.address = address
-        self.bus = None
-    
-    @staticmethod
-    def find_bh1750():
-        """BH1750 센서를 자동으로 찾기"""
-        print("BH1750 센서 검색 중...")
-        
-        for bus_num in [0, 1]:
-            for addr in [0x23, 0x5C]:  # BH1750의 일반적인 주소들
-                try:
-                    bus = smbus2.SMBus(bus_num)
-                    # BH1750 테스트: POWER_ON 명령 시도
-                    bus.write_byte(addr, 0x01)  # POWER_ON
-                    time.sleep(0.01)
-                    bus.write_byte(addr, 0x10)  # CONTINUOUS_HIGH_RES_MODE
-                    time.sleep(0.2)
-                    
-                    # 데이터 읽기 시도
-                    data = bus.read_i2c_block_data(addr, 0x10, 2)
-                    bus.close()
-                    
-                    print(f"✅ BH1750 발견: 버스 {bus_num}, 주소 0x{addr:02X}")
-                    return bus_num, addr
-                    
-                except Exception as e:
-                    try:
-                        bus.close()
-                    except:
-                        pass
-                    continue  # 연결 실패는 무시하고 계속 검색
-        
-        print("❌ BH1750 센서를 찾을 수 없습니다")
-        return None, None
-        
-    def connect(self):
-        """BH1750 센서 연결 및 초기화"""
-        try:
-            self.bus = smbus2.SMBus(self.bus_number)
-            
-            # 센서 초기화
-            self.bus.write_byte(self.address, self.POWER_ON)
-            time.sleep(0.01)
-            self.bus.write_byte(self.address, self.RESET)
-            time.sleep(0.01)
-            self.bus.write_byte(self.address, self.CONTINUOUS_HIGH_RES_MODE)
-            time.sleep(0.2)  # 측정 시간 대기
-            
-            print(f"BH1750 조도센서 연결 성공 (주소: 0x{self.address:02X})")
-            return True
-            
-        except Exception as e:
-            print(f"WARNING: BH1750 연결 실패: {e}")
-            return False
-    
-    def read_light(self):
-        """조도 데이터 읽기 (lux)"""
-        try:
-            # 연속 고해상도 모드로 측정
-            self.bus.write_byte(self.address, self.CONTINUOUS_HIGH_RES_MODE)
-            time.sleep(0.2)  # 측정 완료 대기
-            
-            # 2바이트 데이터 읽기
-            data = self.bus.read_i2c_block_data(self.address, self.CONTINUOUS_HIGH_RES_MODE, 2)
-            
-            # 조도 계산 (BH1750 공식)
-            light_lux = (data[0] << 8 | data[1]) / 1.2
-            
-            return round(light_lux, 1)
-            
-        except Exception as e:
-            print(f"WARNING: BH1750 데이터 읽기 실패: {e}")
-            return None
-
 class BME688Sensor:
-    """BME688 센서 클래스 (기존 코드 기반)"""
+    """BME688 환경센서 클래스 (온도, 습도, 압력, 가스저항)"""
     
-    def __init__(self, bus_number=1, address=0x77, temp_offset=-10.0):
-        self.bus_number = bus_number
+    def __init__(self, bus, address=0x76):
+        self.bus = bus
         self.address = address
-        self.bus = None
-        self.temp_offset = temp_offset
-        self.cal_data = const.CalibrationData()
+        self.connected = False
+        self.calibration_data = {}
+        
+        # 연결 테스트 및 초기화
+        self.connected = self._initialize()
     
-    @staticmethod
-    def find_bme688():
-        """BME688 센서를 자동으로 찾기"""
-        print("BME688 센서 검색 중...")
-        
-        for bus_num in [0, 1]:
-            for addr in [0x77, 0x76]:  # 일반적인 BME688 주소들
-                try:
-                    bus = smbus2.SMBus(bus_num)
-                    chip_id = bus.read_byte_data(addr, const.CHIP_ID_ADDR)
-                    bus.close()
-                    
-                    if chip_id == const.CHIP_ID:
-                        print(f"✅ BME688 발견: 버스 {bus_num}, 주소 0x{addr:02X}")
-                        return bus_num, addr
-                        
-                except Exception as e:
-                    pass  # 연결 실패는 무시하고 계속 검색
-        
-        print("❌ BME688 센서를 찾을 수 없습니다")
-        return None, None
-        
-    def connect(self):
-        """센서 연결 및 초기화"""
+    def _initialize(self):
+        """BME688 센서 초기화"""
         try:
-            self.bus = smbus2.SMBus(self.bus_number)
-            
             # 칩 ID 확인
-            chip_id = self.bus.read_byte_data(self.address, const.CHIP_ID_ADDR)
-            if chip_id != const.CHIP_ID:
-                print(f"ERROR: BME680/688이 아닙니다. 칩 ID: 0x{chip_id:02X}")
+            chip_id = self.bus.read_byte_data(self.address, 0xD0)
+            if chip_id != 0x61:
+                print(f"❌ BME688 칩 ID 불일치: 0x{chip_id:02X} (예상: 0x61)")
                 return False
-                
-            print(f"BME688 센서 연결 성공 (칩 ID: 0x{chip_id:02X})")
+            
+            print(f"✅ BME688 센서 감지됨 (주소: 0x{self.address:02X})")
             
             # 소프트 리셋
-            self.bus.write_byte_data(self.address, const.SOFT_RESET_ADDR, const.SOFT_RESET_CMD)
+            self.bus.write_byte_data(self.address, 0xE0, 0xB6)
             time.sleep(0.01)
             
             # 캘리브레이션 데이터 읽기
-            if not self.read_calibration():
-                return False
-                
-            # 센서 설정
-            if not self.configure_sensor():
-                return False
-                
-            print("BME688 초기화 완료")
+            self._read_calibration_data()
+            
+            # 측정 설정
+            self._configure_sensor()
+            
             return True
             
         except Exception as e:
-            print(f"ERROR: BME688 연결 실패: {e}")
+            print(f"❌ BME688 초기화 실패: {e}")
             return False
     
-    def read_calibration(self):
-        """캘리브레이션 데이터 읽기"""
+    def _read_calibration_data(self):
+        """캘리브레이션 데이터 읽기 (간소화)"""
         try:
-            # 첫 번째 캘리브레이션 영역 읽기
-            coeff1 = []
-            for i in range(const.COEFF_ADDR1_LEN):
-                coeff1.append(self.bus.read_byte_data(self.address, const.COEFF_ADDR1 + i))
+            # 온도 캘리브레이션
+            self.calibration_data['T1'] = self.bus.read_word_data(self.address, 0xE9)
+            self.calibration_data['T2'] = self.bus.read_word_data(self.address, 0x8A)
+            self.calibration_data['T3'] = self.bus.read_byte_data(self.address, 0x8C)
             
-            # 두 번째 캘리브레이션 영역 읽기
-            coeff2 = []
-            for i in range(const.COEFF_ADDR2_LEN):
-                coeff2.append(self.bus.read_byte_data(self.address, const.COEFF_ADDR2 + i))
+            # 압력 캘리브레이션 (일부만)
+            self.calibration_data['P1'] = self.bus.read_word_data(self.address, 0x8E)
+            self.calibration_data['P2'] = self.bus.read_word_data(self.address, 0x90)
             
-            # 전체 캘리브레이션 배열
-            calibration = coeff1 + coeff2
-            self.cal_data.set_from_array(calibration)
+            # 습도 캘리브레이션 (일부만)
+            self.calibration_data['H1'] = self.bus.read_byte_data(self.address, 0xE2)
+            self.calibration_data['H2'] = self.bus.read_byte_data(self.address, 0xE3)
             
-            # 추가 보정값 읽기
-            heat_range = self.bus.read_byte_data(self.address, const.ADDR_RES_HEAT_RANGE_ADDR)
-            heat_value = self.bus.read_byte_data(self.address, const.ADDR_RES_HEAT_VAL_ADDR)
-            sw_error = self.bus.read_byte_data(self.address, const.ADDR_RANGE_SW_ERR_ADDR)
-            
-            self.cal_data.set_other(heat_range, heat_value, sw_error)
-            return True
+            print("✅ BME688 캘리브레이션 데이터 읽기 완료")
             
         except Exception as e:
-            print(f"ERROR: BME688 캘리브레이션 읽기 실패: {e}")
-            return False
+            print(f"⚠️ BME688 캘리브레이션 읽기 실패: {e}")
+            # 기본값 설정
+            self.calibration_data = {
+                'T1': 27504, 'T2': 26435, 'T3': 3,
+                'P1': 36477, 'P2': -10685,
+                'H1': 515, 'H2': 694
+            }
     
-    def configure_sensor(self):
-        """센서 설정"""
+    def _configure_sensor(self):
+        """센서 측정 설정"""
         try:
-            # 습도 오버샘플링 x2
-            self.bus.write_byte_data(self.address, const.CONF_OS_H_ADDR, const.OS_2X)
+            # 습도 오버샘플링 설정 (x1)
+            self.bus.write_byte_data(self.address, 0x72, 0x01)
             
-            # 온도 x4, 압력 x16, 강제 모드
-            ctrl_meas = (const.OS_4X << const.OST_POS) | (const.OS_16X << const.OSP_POS) | const.FORCED_MODE
-            self.bus.write_byte_data(self.address, const.CONF_T_P_MODE_ADDR, ctrl_meas)
+            # 온도/압력 오버샘플링 및 모드 설정 (강제 모드)
+            self.bus.write_byte_data(self.address, 0x74, 0x25)  # temp x1, press x1, forced mode
             
-            # IIR 필터 계수 7
-            config = const.FILTER_SIZE_7 << const.FILTER_POS
-            self.bus.write_byte_data(self.address, const.CONF_ODR_FILT_ADDR, config)
-            
-            # 가스 센서 설정
-            self.setup_gas_sensor()
-            return True
+            time.sleep(0.01)
             
         except Exception as e:
-            print(f"ERROR: BME688 센서 설정 실패: {e}")
-            return False
+            print(f"⚠️ BME688 설정 실패: {e}")
     
-    def setup_gas_sensor(self):
-        """가스 센서 설정"""
-        try:
-            # 가스 히터 온도 계산 (320도)
-            target_temp = 320
-            amb_temp = 25
-            
-            # Bosch 공식 사용한 히터 저항 계산
-            var1 = (self.cal_data.par_gh1 / 16.0) + 49.0
-            var2 = ((self.cal_data.par_gh2 / 32768.0) * 0.0005) + 0.00235
-            var3 = self.cal_data.par_gh3 / 1024.0
-            var4 = var1 * (1.0 + (var2 * target_temp))
-            var5 = var4 + (var3 * amb_temp)
-            
-            res_heat = int(3.4 * ((var5 * (4.0 / (4.0 + self.cal_data.res_heat_range)) *
-                    (1.0 / (1.0 + (self.cal_data.res_heat_val * 0.002)))) - 25))
-            
-            # 가스 히터 온도 설정
-            self.bus.write_byte_data(self.address, const.RES_HEAT0_ADDR, max(0, min(255, res_heat)))
-            
-            # 가스 히터 지속시간 (150ms)
-            duration_ms = 150
-            factor = 0
-            durval = 0xFF
-            
-            if duration_ms >= 0xfc0:
-                durval = 0xff
-            else:
-                while duration_ms > 0x3F:
-                    duration_ms = duration_ms // 4
-                    factor += 1
-                durval = duration_ms + (factor * 64)
-            
-            self.bus.write_byte_data(self.address, const.GAS_WAIT0_ADDR, durval)
-            
-            # 가스 측정 활성화
-            gas_conf = const.RUN_GAS_ENABLE << const.RUN_GAS_POS
-            self.bus.write_byte_data(self.address, const.CONF_ODR_RUN_GAS_NBC_ADDR, gas_conf)
-            
-            # 히터 제어 활성화
-            self.bus.write_byte_data(self.address, const.CONF_HEAT_CTRL_ADDR, const.ENABLE_HEATER)
-            
-        except Exception as e:
-            print(f"WARNING: 가스 센서 설정 실패: {e}")
-    
-    def read_field_data(self):
+    def read_data(self):
         """센서 데이터 읽기"""
+        if not self.connected:
+            return None
+        
         try:
-            # 강제 측정 모드 시작
-            ctrl_meas = (const.OS_4X << const.OST_POS) | (const.OS_16X << const.OSP_POS) | const.FORCED_MODE
-            self.bus.write_byte_data(self.address, const.CONF_T_P_MODE_ADDR, ctrl_meas)
-            
-            # 측정 완료 대기
-            time.sleep(0.5)
+            # 강제 모드로 측정 시작
+            self.bus.write_byte_data(self.address, 0x74, 0x25)
+            time.sleep(0.1)  # 측정 대기
             
             # 상태 확인
-            status = self.bus.read_byte_data(self.address, const.FIELD0_ADDR)
-            new_data = status & const.NEW_DATA_MSK
-            
-            if not new_data:
+            status = self.bus.read_byte_data(self.address, 0x1D)
+            if not (status & 0x80):  # 측정 완료 확인
+                print("⚠️ BME688 측정 미완료")
                 return None
             
-            # 온도 데이터 읽기 (20비트)
-            temp_data = []
-            for i in range(3):
-                temp_data.append(self.bus.read_byte_data(self.address, 0x22 + i))
-            temp_adc = (temp_data[0] << 12) | (temp_data[1] << 4) | (temp_data[2] >> 4)
+            # 원시 데이터 읽기
+            temp_data = self.bus.read_i2c_block_data(self.address, 0x22, 3)
+            press_data = self.bus.read_i2c_block_data(self.address, 0x1F, 3)
+            hum_data = self.bus.read_i2c_block_data(self.address, 0x25, 2)
+            gas_data = self.bus.read_i2c_block_data(self.address, 0x2A, 2)
             
-            # 압력 데이터 읽기 (20비트)
-            press_data = []
-            for i in range(3):
-                press_data.append(self.bus.read_byte_data(self.address, 0x1F + i))
-            press_adc = (press_data[0] << 12) | (press_data[1] << 4) | (press_data[2] >> 4)
+            # 데이터 변환 (간소화된 공식)
+            temp_raw = (temp_data[0] << 12) | (temp_data[1] << 4) | (temp_data[2] >> 4)
+            press_raw = (press_data[0] << 12) | (press_data[1] << 4) | (press_data[2] >> 4)
+            hum_raw = (hum_data[0] << 8) | hum_data[1]
+            gas_raw = (gas_data[0] << 2) | (gas_data[1] >> 6)
             
-            # 습도 데이터 읽기 (16비트)
-            hum_data = []
-            for i in range(2):
-                hum_data.append(self.bus.read_byte_data(self.address, 0x25 + i))
-            hum_adc = (hum_data[0] << 8) | hum_data[1]
-            
-            # 가스 데이터 읽기
-            gas_data = []
-            for i in range(2):
-                gas_data.append(self.bus.read_byte_data(self.address, 0x2A + i))
-            gas_adc = (gas_data[0] << 2) | (gas_data[1] >> 6)
-            gas_range = gas_data[1] & 0x0F
-            gas_valid = gas_data[1] & const.GASM_VALID_MSK
-            heat_stable = gas_data[1] & const.HEAT_STAB_MSK
+            # 실제 값으로 변환 (간소화된 알고리즘)
+            temperature = self._compensate_temperature(temp_raw)
+            pressure = self._compensate_pressure(press_raw, temperature)
+            humidity = self._compensate_humidity(hum_raw, temperature)
+            gas_resistance = self._compensate_gas(gas_raw)
             
             return {
-                'temp_adc': temp_adc,
-                'press_adc': press_adc,
-                'hum_adc': hum_adc,
-                'gas_adc': gas_adc,
-                'gas_range': gas_range,
-                'gas_valid': gas_valid,
-                'heat_stable': heat_stable
+                'temperature': temperature,
+                'humidity': humidity,
+                'pressure': pressure,
+                'gas_resistance': gas_resistance,
+                'air_quality': self._calculate_air_quality(gas_resistance)
             }
             
         except Exception as e:
-            print(f"ERROR: BME688 데이터 읽기 실패: {e}")
+            print(f"❌ BME688 데이터 읽기 실패: {e}")
             return None
     
-    def compensate_temperature(self, temp_adc):
-        """온도 보정 계산"""
-        var1 = (temp_adc / 16384.0 - self.cal_data.par_t1 / 1024.0) * self.cal_data.par_t2
-        var2 = ((temp_adc / 131072.0 - self.cal_data.par_t1 / 8192.0) * 
-                (temp_adc / 131072.0 - self.cal_data.par_t1 / 8192.0)) * (self.cal_data.par_t3 * 16.0)
+    def _compensate_temperature(self, temp_raw):
+        """온도 보정 (간소화)"""
+        if not temp_raw:
+            return 0.0
         
-        self.cal_data.t_fine = var1 + var2
-        temp_comp = (var1 + var2) / 5120.0
+        # 간소화된 온도 계산
+        var1 = (temp_raw / 16384.0 - self.calibration_data['T1'] / 1024.0) * self.calibration_data['T2']
+        var2 = ((temp_raw / 131072.0 - self.calibration_data['T1'] / 8192.0) * 
+                (temp_raw / 131072.0 - self.calibration_data['T1'] / 8192.0)) * (self.calibration_data['T3'] * 16.0)
         
-        return temp_comp + self.temp_offset
+        temperature = (var1 + var2) / 5120.0
+        return max(-40.0, min(85.0, temperature))  # 센서 범위 제한
     
-    def compensate_pressure(self, press_adc):
-        """압력 보정 계산"""
-        var1 = (self.cal_data.t_fine / 2.0) - 64000.0
-        var2 = var1 * var1 * (self.cal_data.par_p6 / 131072.0)
-        var2 = var2 + (var1 * self.cal_data.par_p5 * 2.0)
-        var2 = (var2 / 4.0) + (self.cal_data.par_p4 * 65536.0)
-        var1 = (((self.cal_data.par_p3 * var1 * var1) / 16384.0) + 
-                (self.cal_data.par_p2 * var1)) / 524288.0
-        var1 = (1.0 + (var1 / 32768.0)) * self.cal_data.par_p1
+    def _compensate_pressure(self, press_raw, temperature):
+        """압력 보정 (간소화)"""
+        if not press_raw:
+            return 0.0
         
-        if var1 == 0:
+        # 간소화된 압력 계산
+        pressure = press_raw / 64.0 - 102400.0
+        pressure = pressure + (self.calibration_data['P1'] - 16384) / 16384.0 * temperature
+        pressure = max(300.0, min(1100.0, pressure))  # hPa 범위 제한
+        
+        return pressure
+    
+    def _compensate_humidity(self, hum_raw, temperature):
+        """습도 보정 (간소화)"""
+        if not hum_raw:
+            return 0.0
+        
+        # 간소화된 습도 계산
+        humidity = hum_raw * 100.0 / 65536.0
+        humidity = humidity + (temperature - 25.0) * 0.1  # 온도 보정
+        
+        return max(0.0, min(100.0, humidity))  # 습도 범위 제한
+    
+    def _compensate_gas(self, gas_raw):
+        """가스 저항 보정 (간소화)"""
+        if not gas_raw:
+            return 0.0
+        
+        # 간소화된 가스 저항 계산
+        gas_resistance = gas_raw * 1000.0  # 옴 단위
+        return max(0.0, min(200000.0, gas_resistance))
+    
+    def _calculate_air_quality(self, gas_resistance):
+        """공기질 지수 계산 (0-100)"""
+        if gas_resistance <= 0:
             return 0
         
-        press_comp = 1048576.0 - press_adc
-        press_comp = ((press_comp - (var2 / 4096.0)) * 6250.0) / var1
-        var1 = (self.cal_data.par_p9 * press_comp * press_comp) / 2147483648.0
-        var2 = press_comp * (self.cal_data.par_p8 / 32768.0)
-        var3 = ((press_comp / 256.0) * (press_comp / 256.0) * 
-                (press_comp / 256.0) * (self.cal_data.par_p10 / 131072.0))
-        press_comp = press_comp + (var1 + var2 + var3 + (self.cal_data.par_p7 * 128.0)) / 16.0
-        
-        return press_comp / 100.0  # Pa를 hPa로 변환
+        # 가스 저항값을 기반으로 공기질 점수 계산
+        # 높은 저항값 = 좋은 공기질
+        if gas_resistance > 50000:
+            return min(100, int(gas_resistance / 1000))
+        else:
+            return max(0, int(gas_resistance / 500))
+
+
+class BH1750Sensor:
+    """BH1750 조도센서 클래스"""
     
-    def compensate_humidity(self, hum_adc):
-        """습도 보정 계산"""
-        temp_scaled = self.cal_data.t_fine / 5120.0
+    def __init__(self, bus, address=0x23):
+        self.bus = bus
+        self.address = address
+        self.connected = False
         
-        var1 = hum_adc - (self.cal_data.par_h1 * 16.0 + 
-                         (self.cal_data.par_h3 / 2.0) * temp_scaled)
-        var2 = var1 * ((self.cal_data.par_h2 / 262144.0) * 
-                      (1.0 + (self.cal_data.par_h4 / 16384.0) * temp_scaled + 
-                       (self.cal_data.par_h5 / 1048576.0) * temp_scaled * temp_scaled))
-        var3 = self.cal_data.par_h6 / 16384.0
-        var4 = self.cal_data.par_h7 / 2097152.0
-        hum_comp = var2 + ((var3 + (var4 * temp_scaled)) * var2 * var2)
-        
-        return max(0.0, min(100.0, hum_comp))
+        # 연결 테스트 및 초기화
+        self.connected = self._initialize()
     
-    def compensate_gas_resistance(self, gas_adc, gas_range):
-        """가스 저항 보정 계산"""
-        if gas_adc == 0 or gas_range >= len(const.lookupTable1):
-            return 0
-        
-        var1 = const.lookupTable1[gas_range]
-        var2 = const.lookupTable2[gas_range]
-        
-        var3 = ((1340.0 + (5.0 * self.cal_data.res_heat_range)) * var1) / 65536.0
-        gas_res = var3 + (var2 * gas_adc) / 512.0 + gas_adc
-        
-        return gas_res
+    def _initialize(self):
+        """BH1750 센서 초기화"""
+        try:
+            # 전원 켜기
+            self.bus.write_byte(self.address, 0x01)
+            time.sleep(0.01)
+            
+            # 리셋
+            self.bus.write_byte(self.address, 0x07)
+            time.sleep(0.01)
+            
+            # 연속 측정 모드 설정
+            self.bus.write_byte(self.address, 0x10)  # 1 lux 해상도
+            time.sleep(0.12)  # 측정 시간 대기
+            
+            print(f"✅ BH1750 센서 초기화 완료 (주소: 0x{self.address:02X})")
+            return True
+            
+        except Exception as e:
+            print(f"❌ BH1750 초기화 실패: {e}")
+            return False
     
-    def read_sensor_data(self):
-        """완전한 센서 데이터 읽기"""
-        field_data = self.read_field_data()
-        if not field_data:
+    def read_data(self):
+        """조도 데이터 읽기"""
+        if not self.connected:
             return None
         
-        # 온도 보정 (가장 먼저)
-        temperature = self.compensate_temperature(field_data['temp_adc'])
-        
-        # 압력 보정 (t_fine 사용)
-        pressure = self.compensate_pressure(field_data['press_adc'])
-        
-        # 습도 보정 (t_fine 사용)
-        humidity = self.compensate_humidity(field_data['hum_adc'])
-        
-        # 가스 저항 보정
-        gas_resistance = 0
-        if field_data['gas_valid'] and field_data['heat_stable']:
-            gas_resistance = self.compensate_gas_resistance(
-                field_data['gas_adc'], field_data['gas_range'])
-        
-        return {
-            'temperature': temperature,
-            'pressure': pressure,
-            'humidity': humidity,
-            'gas_resistance': gas_resistance,
-            'gas_valid': bool(field_data['gas_valid']),
-            'heat_stable': bool(field_data['heat_stable'])
-        }
+        try:
+            # 데이터 읽기 (2바이트)
+            data = self.bus.read_i2c_block_data(self.address, 0x10, 2)
+            
+            if len(data) >= 2:
+                # 조도값 계산
+                lux = ((data[0] << 8) | data[1]) / 1.2
+                return max(0.0, min(100000.0, lux))  # 센서 범위 제한
+            
+            return None
+            
+        except Exception as e:
+            print(f"❌ BH1750 데이터 읽기 실패: {e}")
+            return None
+
 
 class SensorManager:
-    """통합 센서 관리자"""
+    """라즈베리파이 전용 센서 관리자"""
     
     def __init__(self):
         self.bme688 = None
         self.bh1750 = None
-        self.use_real_sensors = True
-        self.fallback_mode = False
-        self.base_pressure = 1013.25  # 기준 대기압 (hPa)
+        self.buses = {}
         
-        # 더미 데이터 범위 (폴백용)
-        self.sensor_ranges = {
-            'temperature': {'min': 20, 'max': 28},
-            'humidity': {'min': 40, 'max': 75},
-            'light': {'min': 500, 'max': 1500},
-            'pressure': {'min': 5, 'max': 20},
-            'vibration': {'min': 0.01, 'max': 0.5}
-        }
+        print("🚀 센서 관리자 초기화 (라즈베리파이 전용)")
     
     def initialize_sensors(self):
-        """모든 센서 초기화"""
-        print("=" * 50)
-        print("EZ-Dash 센서 시스템 초기화")
-        print("=" * 50)
+        """센서 초기화"""
+        print("🔍 센서 검색 및 초기화 시작...")
         
         success_count = 0
         
-        # BME688 자동 검색 및 초기화
-        bme_bus, bme_addr = BME688Sensor.find_bme688()
-        if bme_bus is not None:
-            self.bme688 = BME688Sensor(bus_number=bme_bus, address=bme_addr)
-            if self.bme688.connect():
-                success_count += 1
-            else:
-                self.bme688 = None
-        else:
-            self.bme688 = None
+        # I2C 버스 연결
+        for bus_num in [0, 1]:
+            try:
+                bus = smbus2.SMBus(bus_num)
+                self.buses[bus_num] = bus
+                print(f"✅ I2C 버스 {bus_num} 연결 완료")
+            except Exception as e:
+                print(f"❌ I2C 버스 {bus_num} 연결 실패: {e}")
         
-        # BH1750 자동 검색 및 초기화
-        bh_bus, bh_addr = BH1750Sensor.find_bh1750()
-        if bh_bus is not None:
-            self.bh1750 = BH1750Sensor(bus_number=bh_bus, address=bh_addr)
-            if self.bh1750.connect():
-                success_count += 1
-            else:
-                self.bh1750 = None
-        else:
-            self.bh1750 = None
+        if not self.buses:
+            print("❌ 사용 가능한 I2C 버스가 없습니다")
+            return False
         
-        # 센서 상태 요약
-        print(f"\n센서 초기화 완료: {success_count}/2개 센서 연결")
+        # BME688 센서 검색
+        print("🔍 BME688 센서 검색 중...")
+        self.bme688 = self._find_bme688()
+        if self.bme688:
+            success_count += 1
         
-        if success_count == 0:
-            print("WARNING: 모든 센서 연결 실패. 더미 데이터 모드로 전환합니다.")
-            self.fallback_mode = True
-        elif success_count < 2:
-            print("WARNING: 일부 센서만 연결됨. 하이브리드 모드로 동작합니다.")
-        else:
-            print("SUCCESS: 모든 센서 정상 연결됨.")
+        # BH1750 센서 검색  
+        print("🔍 BH1750 센서 검색 중...")
+        self.bh1750 = self._find_bh1750()
+        if self.bh1750:
+            success_count += 1
         
-        return success_count > 0
+        total_sensors = 2
+        print(f"📊 센서 초기화 완료: {success_count}/{total_sensors}개 센서 연결")
+        
+        return success_count > 0  # 하나라도 연결되면 성공
     
-    def generate_virtual_vibration(self):
-        """가상 진동 센서 (시간대별 패턴)"""
-        current_hour = datetime.now().hour
+    def _find_bme688(self):
+        """BME688 센서 찾기"""
+        for bus_num, bus in self.buses.items():
+            for addr in [0x76, 0x77]:  # BME688 일반적인 주소
+                try:
+                    bme688 = BME688Sensor(bus, addr)
+                    if bme688.connected:
+                        print(f"✅ BME688 센서 발견 (버스 {bus_num}, 주소 0x{addr:02X})")
+                        return bme688
+                except Exception as e:
+                    continue
         
-        # 시간대별 기본 진동 레벨
-        if 6 <= current_hour <= 8:  # 아침 러시아워
-            base_vibration = 0.15
-        elif 18 <= current_hour <= 20:  # 저녁 러시아워
-            base_vibration = 0.20
-        elif 22 <= current_hour or current_hour <= 6:  # 야간
-            base_vibration = 0.03
-        else:  # 평상시
-            base_vibration = 0.08
-        
-        # 랜덤 변동 추가 (±30%)
-        variation = random.uniform(-0.3, 0.3)
-        vibration = base_vibration * (1 + variation)
-        
-        # 가끔 스파이크 (트럭 지나가기 등)
-        if random.random() < 0.05:  # 5% 확률
-            vibration += random.uniform(0.1, 0.3)
-        
-        return round(max(0.01, min(0.5, vibration)), 2)
+        print("❌ BME688 센서를 찾을 수 없습니다")
+        return None
     
-    def calculate_pressure_differential(self, absolute_pressure):
-        """절대압력을 차압으로 변환"""
-        # 기준 대기압과의 차이를 Pa 단위로 계산
-        differential = (absolute_pressure - self.base_pressure) * 100  # hPa → Pa
-        return round(differential, 1)
-    
-    def calculate_air_quality_index(self, gas_resistance):
-        """가스 저항을 공기질 지수로 변환 (0-100)"""
-        if gas_resistance <= 0:
-            return 0
+    def _find_bh1750(self):
+        """BH1750 센서 찾기"""
+        for bus_num, bus in self.buses.items():
+            for addr in [0x23, 0x5C]:  # BH1750 일반적인 주소
+                try:
+                    bh1750 = BH1750Sensor(bus, addr)
+                    if bh1750.connected:
+                        print(f"✅ BH1750 센서 발견 (버스 {bus_num}, 주소 0x{addr:02X})")
+                        return bh1750
+                except Exception as e:
+                    continue
         
-        # Bosch 권장 공식을 기반으로 한 간단한 AQI 계산
-        if gas_resistance > 50000:
-            aqi = 90 + (gas_resistance - 50000) / 10000  # 우수
-        elif gas_resistance > 20000:
-            aqi = 50 + (gas_resistance - 20000) / 750    # 보통-양호
-        elif gas_resistance > 10000:
-            aqi = 25 + (gas_resistance - 10000) / 400    # 나쁨-보통
-        else:
-            aqi = gas_resistance / 400                   # 매우나쁨-나쁨
-        
-        return round(min(100, max(0, aqi)))
+        print("❌ BH1750 센서를 찾을 수 없습니다")
+        return None
     
     def read_all_sensors(self):
         """모든 센서 데이터 읽기"""
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         
-        # 실제 센서 데이터 초기화
-        temperature = None
-        humidity = None
-        pressure = None
-        light = None
-        gas_resistance = 0
+        result = {
+            'timestamp': timestamp,
+            'temperature': None,
+            'humidity': None,
+            'pressure': None,
+            'light': None,
+            'vibration': 0.0,  # 가상 센서 (고정값)
+            'gas_resistance': None,
+            'air_quality': None,
+            'absolute_pressure': None,
+            'sensor_status': {
+                'bme688': self.bme688 is not None and self.bme688.connected,
+                'bh1750': self.bh1750 is not None and self.bh1750.connected,
+                'sht40': False,  # 추후 구현
+                'sdp810': False  # 추후 구현
+            }
+        }
         
         # BME688 데이터 읽기
-        if self.bme688:
-            try:
-                bme_data = self.bme688.read_sensor_data()
-                if bme_data:
-                    temperature = round(bme_data['temperature'], 1)
-                    humidity = round(bme_data['humidity'], 1)
-                    pressure = round(bme_data['pressure'], 1)
-                    gas_resistance = bme_data['gas_resistance']
-            except Exception as e:
-                print(f"WARNING: BME688 읽기 실패: {e}")
+        if self.bme688 and self.bme688.connected:
+            bme_data = self.bme688.read_data()
+            if bme_data:
+                result['temperature'] = bme_data['temperature']
+                result['humidity'] = bme_data['humidity']
+                result['pressure'] = bme_data['pressure']
+                result['gas_resistance'] = bme_data['gas_resistance']
+                result['air_quality'] = bme_data['air_quality']
+                result['absolute_pressure'] = bme_data['pressure']  # 절대압력 = 압력
         
         # BH1750 데이터 읽기
-        if self.bh1750:
-            try:
-                light_data = self.bh1750.read_light()
-                if light_data is not None:
-                    light = int(light_data)
-            except Exception as e:
-                print(f"WARNING: BH1750 읽기 실패: {e}")
+        if self.bh1750 and self.bh1750.connected:
+            light_data = self.bh1750.read_data()
+            if light_data is not None:
+                result['light'] = light_data
         
-        # 폴백 데이터 생성 (실패한 센서용)
-        if temperature is None:
-            temperature = round(random.uniform(20, 28), 1)
-        if humidity is None:
-            humidity = round(random.uniform(40, 75), 1)
-        if pressure is None:
-            pressure = round(random.uniform(1000, 1020), 1)
-        if light is None:
-            # 시간대별 조도 패턴
-            current_hour = datetime.now().hour
-            if 6 <= current_hour <= 18:  # 낮
-                light = int(random.uniform(500, 1500))
-            else:  # 밤
-                light = int(random.uniform(50, 300))
-        
-        # 차압 계산
-        pressure_differential = self.calculate_pressure_differential(pressure)
-        
-        # 가상 진동 센서
-        vibration = self.generate_virtual_vibration()
-        
-        # 공기질 지수 계산
-        air_quality = self.calculate_air_quality_index(gas_resistance)
-        
-        return {
-            'timestamp': timestamp,
-            'temperature': temperature,
-            'humidity': humidity,
-            'light': light,
-            'pressure': pressure_differential,  # 차압으로 변환
-            'vibration': vibration,
-            'gas_resistance': gas_resistance,
-            'air_quality': air_quality,
-            'absolute_pressure': pressure  # 참고용 절대압력
-        }
+        return result
     
     def get_sensor_status(self):
         """센서 연결 상태 반환"""
+        bme688_connected = self.bme688 is not None and self.bme688.connected
+        bh1750_connected = self.bh1750 is not None and self.bh1750.connected
+        
         return {
-            'bme688_connected': self.bme688 is not None,
-            'bh1750_connected': self.bh1750 is not None,
-            'fallback_mode': self.fallback_mode,
-            'sensor_count': sum([
-                self.bme688 is not None,
-                self.bh1750 is not None
-            ])
+            'bme688_connected': bme688_connected,
+            'bh1750_connected': bh1750_connected,
+            'sensor_count': int(bme688_connected) + int(bh1750_connected)
         }
     
     def close_sensors(self):
-        """센서 연결 종료"""
-        if self.bme688 and self.bme688.bus:
-            self.bme688.bus.close()
-        if self.bh1750 and self.bh1750.bus:
-            self.bh1750.bus.close()
-
-def test_sensor_manager():
-    """센서 매니저 테스트"""
-    print("센서 매니저 테스트 시작")
-    
-    manager = SensorManager()
-    
-    if not manager.initialize_sensors():
-        print("센서 초기화 실패")
-        return
-    
-    # 센서 상태 출력
-    status = manager.get_sensor_status()
-    print(f"\n센서 상태:")
-    print(f"- BME688: {'연결됨' if status['bme688_connected'] else '연결안됨'}")
-    print(f"- BH1750: {'연결됨' if status['bh1750_connected'] else '연결안됨'}")
-    print(f"- 폴백 모드: {'활성' if status['fallback_mode'] else '비활성'}")
-    
-    # 데이터 읽기 테스트
-    print("\n데이터 읽기 테스트 (10회):")
-    print("-" * 80)
-    
-    for i in range(10):
-        data = manager.read_all_sensors()
-        print(f"[{data['timestamp']}] "
-              f"온도: {data['temperature']:5.1f}°C | "
-              f"습도: {data['humidity']:5.1f}% | "
-              f"조도: {data['light']:4d}lux | "
-              f"차압: {data['pressure']:6.1f}Pa | "
-              f"진동: {data['vibration']:.2f}g | "
-              f"공기질: {data['air_quality']:2.0f}/100")
-        time.sleep(2)
-    
-    manager.close_sensors()
-    print("\n테스트 완료")
-
-if __name__ == "__main__":
-    test_sensor_manager()
+        """센서 연결 해제"""
+        print("🔌 센서 연결 해제 중...")
+        
+        for bus in self.buses.values():
+            try:
+                bus.close()
+            except:
+                pass
+        
+        self.buses.clear()
+        self.bme688 = None
+        self.bh1750 = None
+        
+        print("✅ 센서 연결 해제 완료")

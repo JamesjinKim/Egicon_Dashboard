@@ -99,63 +99,124 @@ function updateSensorDisplay(data) {
     updateWidgetValues(data);
 }
 
-// 위젯 값 업데이트 (에러 처리 개선)
+// 위젯 값 업데이트 (센서 상태 반영)
 function updateWidgetValues(data) {
     try {
         // 데이터 유효성 검사 및 안전한 업데이트
         if (data && typeof data === 'object') {
-            // 온도 위젯
+            // 온도 위젯 (센서 상태 반영)
             const tempElement = document.getElementById('temp-value');
             if (tempElement) {
-                const tempValue = (data.temperature !== undefined && data.temperature !== null) 
-                    ? data.temperature.toFixed(1) 
-                    : '--';
+                const sensorConnected = data.sensor_status && (data.sensor_status.bme688 || data.sensor_status.sht40);
+                let tempValue, statusClass;
+                
+                if (data.temperature !== undefined && data.temperature !== null) {
+                    tempValue = data.temperature.toFixed(1);
+                    statusClass = 'sensor-connected';
+                } else if (sensorConnected) {
+                    tempValue = '0.0';
+                    statusClass = 'sensor-error';
+                } else {
+                    tempValue = '센서 없음';
+                    statusClass = 'sensor-disconnected';
+                }
+                
                 tempElement.innerHTML = tempValue + '<span class="widget-unit">°C</span>';
+                tempElement.className = tempElement.className.replace(/sensor-\w+/g, '') + ' ' + statusClass;
             }
             
-            // 습도 위젯
+            // 습도 위젯 (센서 상태 반영)
             const humidityElement = document.getElementById('humidity-value');
             if (humidityElement) {
-                const humidityValue = (data.humidity !== undefined && data.humidity !== null) 
-                    ? data.humidity.toFixed(1) 
-                    : '--';
+                const sensorConnected = data.sensor_status && (data.sensor_status.bme688 || data.sensor_status.sht40);
+                let humidityValue, statusClass;
+                
+                if (data.humidity !== undefined && data.humidity !== null) {
+                    humidityValue = data.humidity.toFixed(1);
+                    statusClass = 'sensor-connected';
+                } else if (sensorConnected) {
+                    humidityValue = '0.0';
+                    statusClass = 'sensor-error';
+                } else {
+                    humidityValue = '센서 없음';
+                    statusClass = 'sensor-disconnected';
+                }
+                
                 humidityElement.innerHTML = humidityValue + '<span class="widget-unit">%</span>';
+                humidityElement.className = humidityElement.className.replace(/sensor-\w+/g, '') + ' ' + statusClass;
             }
             
-            // 조도 위젯
+            // 조도 위젯 (센서 상태 반영)
             const lightElement = document.getElementById('light-value');
             if (lightElement) {
-                const lightValue = (data.light !== undefined && data.light !== null) 
-                    ? Math.round(data.light) 
-                    : '--';
+                const sensorConnected = data.sensor_status && data.sensor_status.bh1750;
+                let lightValue, statusClass;
+                
+                if (data.light !== undefined && data.light !== null) {
+                    lightValue = Math.round(data.light);
+                    statusClass = 'sensor-connected';
+                } else if (sensorConnected) {
+                    lightValue = '0';
+                    statusClass = 'sensor-error';
+                } else {
+                    lightValue = '센서 없음';
+                    statusClass = 'sensor-disconnected';
+                }
+                
                 lightElement.innerHTML = lightValue + '<span class="widget-unit">lux</span>';
+                lightElement.className = lightElement.className.replace(/sensor-\w+/g, '') + ' ' + statusClass;
             }
             
-            // 압력 위젯
+            // 압력 위젯 (센서 상태 반영)
             const pressureElement = document.getElementById('pressure-value');
             if (pressureElement) {
-                const pressureValue = (data.pressure !== undefined && data.pressure !== null) 
-                    ? data.pressure.toFixed(1) 
-                    : '--';
+                const sensorConnected = data.sensor_status && (data.sensor_status.bme688 || data.sensor_status.sdp810);
+                let pressureValue, statusClass;
+                
+                if (data.pressure !== undefined && data.pressure !== null) {
+                    pressureValue = data.pressure.toFixed(1);
+                    statusClass = 'sensor-connected';
+                } else if (sensorConnected) {
+                    pressureValue = '0.0';
+                    statusClass = 'sensor-error';
+                } else {
+                    pressureValue = '센서 없음';
+                    statusClass = 'sensor-disconnected';
+                }
+                
                 pressureElement.innerHTML = pressureValue + '<span class="widget-unit">Pa</span>';
+                pressureElement.className = pressureElement.className.replace(/sensor-\w+/g, '') + ' ' + statusClass;
             }
             
-            // 진동 위젯
+            // 진동 위젯 (고정값)
             const vibrationElement = document.getElementById('vibration-value');
             if (vibrationElement) {
                 const vibrationValue = (data.vibration !== undefined && data.vibration !== null) 
                     ? data.vibration.toFixed(2) 
-                    : '--';
+                    : '0.00';
                 vibrationElement.innerHTML = vibrationValue + '<span class="widget-unit">g</span>';
+                vibrationElement.className = vibrationElement.className.replace(/sensor-\w+/g, '') + ' sensor-virtual';
             }
             
-            // 공기질 위젯
+            // 공기질 위젯 (센서 상태 반영)
             const airqualityElement = document.getElementById('airquality-value');
             if (airqualityElement) {
-                const airqualityValue = (data.air_quality !== undefined && data.air_quality !== null) 
-                    ? Math.round(data.air_quality) 
-                    : '--';
+                const sensorConnected = data.sensor_status && data.sensor_status.bme688;
+                let airqualityValue, statusClass;
+                
+                if (data.air_quality !== undefined && data.air_quality !== null) {
+                    airqualityValue = Math.round(data.air_quality);
+                    statusClass = 'sensor-connected';
+                } else if (sensorConnected) {
+                    airqualityValue = '0';
+                    statusClass = 'sensor-error';
+                } else {
+                    airqualityValue = '센서 없음';
+                    statusClass = 'sensor-disconnected';
+                }
+                
                 airqualityElement.innerHTML = airqualityValue + '<span class="widget-unit">/100</span>';
+                airqualityElement.className = airqualityElement.className.replace(/sensor-\w+/g, '') + ' ' + statusClass;
             }
         } else {
             // 데이터가 없을 경우 모든 위젯을 '--'로 설정

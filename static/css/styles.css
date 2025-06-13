@@ -22,6 +22,11 @@
     --info-color: #17a2b8;
     --border-color: #dee2e6;
     --shadow-color: rgba(0, 0, 0, 0.1);
+    /* 센서 상태 색상 */
+    --sensor-connected: #28a745;
+    --sensor-disconnected: #dc3545;
+    --sensor-error: #ffc107;
+    --sensor-virtual: #6c757d;
 }
 
 * {
@@ -315,6 +320,47 @@ body {
 
 .airquality .widget-color-bar { background-color: var(--airquality-color); }
 .airquality .widget-icon { background-color: var(--airquality-color); }
+
+/* 센서 상태별 스타일 */
+.sensor-connected {
+    border-left: 4px solid var(--sensor-connected) !important;
+}
+
+.sensor-connected .widget-value {
+    color: var(--sensor-connected);
+    font-weight: 600;
+}
+
+.sensor-disconnected {
+    border-left: 4px solid var(--sensor-disconnected) !important;
+    opacity: 0.7;
+}
+
+.sensor-disconnected .widget-value {
+    color: var(--sensor-disconnected);
+    font-weight: 500;
+    font-size: 0.9em;
+}
+
+.sensor-error {
+    border-left: 4px solid var(--sensor-error) !important;
+    background-color: rgba(255, 193, 7, 0.1);
+}
+
+.sensor-error .widget-value {
+    color: var(--sensor-error);
+    font-weight: 500;
+}
+
+.sensor-virtual {
+    border-left: 4px solid var(--sensor-virtual) !important;
+    background-color: rgba(108, 117, 125, 0.05);
+}
+
+.sensor-virtual .widget-value {
+    color: var(--sensor-virtual);
+    font-style: italic;
+}
 
 /* 상태 정보 표시 */
 .status-bar {
