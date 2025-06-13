@@ -77,7 +77,8 @@ def get_current_data():
                 'temperature': sensor_data['temperature'],
                 'humidity': sensor_data['humidity'],
                 'light': sensor_data['light'],
-                'pressure': sensor_data['pressure'],
+                'pressure': sensor_data['pressure'],  # BME688 절대압력 (hPa)
+                'differential_pressure': sensor_data['differential_pressure'],  # SDP810 차압 (Pa)
                 'vibration': sensor_data['vibration'],
                 'gas_resistance': sensor_data['gas_resistance'],
                 'air_quality': sensor_data['air_quality'],
@@ -92,6 +93,7 @@ def get_current_data():
                 'humidity': None,
                 'light': None,
                 'pressure': None,
+                'differential_pressure': None,
                 'vibration': 0.0,
                 'gas_resistance': None,
                 'air_quality': None,
@@ -113,6 +115,7 @@ def get_current_data():
             'humidity': None,
             'light': None,
             'pressure': None,
+            'differential_pressure': None,
             'vibration': 0.0,
             'gas_resistance': None,
             'air_quality': None,

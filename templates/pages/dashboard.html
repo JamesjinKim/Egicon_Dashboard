@@ -41,15 +41,27 @@
             </div>
         </div>
 
-        <!-- 차압 센서 위젯 -->
+        <!-- 차압 센서 위젯 (SDP810) -->
         <div class="sensor-widget pressure">
             <div class="widget-color-bar"></div>
             <div class="widget-content">
                 <div class="widget-icon">
                     <i class="fas fa-compress-alt"></i>
                 </div>
-                <div class="widget-title">PRESSURE</div>
-                <div class="widget-value" id="pressure-value">--<span class="widget-unit">Pa</span></div>
+                <div class="widget-title">DIFF PRESSURE</div>
+                <div class="widget-value" id="differential-pressure-value">--<span class="widget-unit">Pa</span></div>
+            </div>
+        </div>
+
+        <!-- 대기압 센서 위젯 (BME688) -->
+        <div class="sensor-widget atmospheric-pressure">
+            <div class="widget-color-bar"></div>
+            <div class="widget-content">
+                <div class="widget-icon">
+                    <i class="fas fa-thermometer-half"></i>
+                </div>
+                <div class="widget-title">ATMOSPHERIC</div>
+                <div class="widget-value" id="pressure-value">--<span class="widget-unit">hPa</span></div>
             </div>
         </div>
 
@@ -121,15 +133,29 @@
             </div>
         </div>
 
-        <!-- 차압 센서 카드 -->
+        <!-- 차압 센서 카드 (SDP810) -->
         <div class="card">
             <div class="card-header">
-                <div class="card-title">차압 센서</div>
+                <div class="card-title">차압 센서 (SDP810)</div>
                 <div class="card-icon">
                     <i class="fas fa-compress-alt"></i>
                 </div>
             </div>
-            <div class="sensor-value" id="pressure-card-value">--<span class="sensor-unit">Pa</span></div>
+            <div class="sensor-value" id="differential-pressure-card-value">--<span class="sensor-unit">Pa</span></div>
+            <div class="chart-container">
+                <canvas id="differentialPressureChart"></canvas>
+            </div>
+        </div>
+
+        <!-- 대기압 센서 카드 (BME688) -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">대기압 센서 (BME688)</div>
+                <div class="card-icon">
+                    <i class="fas fa-thermometer-half"></i>
+                </div>
+            </div>
+            <div class="sensor-value" id="pressure-card-value">--<span class="sensor-unit">hPa</span></div>
             <div class="chart-container">
                 <canvas id="pressureChart"></canvas>
             </div>

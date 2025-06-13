@@ -167,10 +167,10 @@ function updateWidgetValues(data) {
                 lightElement.className = lightElement.className.replace(/sensor-\w+/g, '') + ' ' + statusClass;
             }
             
-            // 압력 위젯 (센서 상태 반영)
+            // 대기압 위젯 (BME688)
             const pressureElement = document.getElementById('pressure-value');
             if (pressureElement) {
-                const sensorConnected = data.sensor_status && (data.sensor_status.bme688 || data.sensor_status.sdp810);
+                const sensorConnected = data.sensor_status && data.sensor_status.bme688;
                 let pressureValue, statusClass;
                 
                 if (data.pressure !== undefined && data.pressure !== null) {
@@ -184,8 +184,29 @@ function updateWidgetValues(data) {
                     statusClass = 'sensor-disconnected';
                 }
                 
-                pressureElement.innerHTML = pressureValue + '<span class="widget-unit">Pa</span>';
+                pressureElement.innerHTML = pressureValue + '<span class="widget-unit">hPa</span>';
                 pressureElement.className = pressureElement.className.replace(/sensor-\w+/g, '') + ' ' + statusClass;
+            }
+            
+            // 차압 위젯 (SDP810)
+            const differentialPressureElement = document.getElementById('differential-pressure-value');
+            if (differentialPressureElement) {
+                const sensorConnected = data.sensor_status && data.sensor_status.sdp810;
+                let pressureValue, statusClass;
+                
+                if (data.differential_pressure !== undefined && data.differential_pressure !== null) {
+                    pressureValue = data.differential_pressure.toFixed(1);
+                    statusClass = 'sensor-connected';
+                } else if (sensorConnected) {
+                    pressureValue = '0.0';
+                    statusClass = 'sensor-error';
+                } else {
+                    pressureValue = '센서 없음';
+                    statusClass = 'sensor-disconnected';
+                }
+                
+                differentialPressureElement.innerHTML = pressureValue + '<span class="widget-unit">Pa</span>';
+                differentialPressureElement.className = differentialPressureElement.className.replace(/sensor-\w+/g, '') + ' ' + statusClass;
             }
             
             // 진동 위젯 (고정값)
@@ -233,8 +254,8 @@ function updateWidgetValues(data) {
 
 // 모든 위젯을 기본값('--')으로 설정
 function setAllWidgetsToDefault() {
-    const widgetIds = ['temp-value', 'humidity-value', 'light-value', 'pressure-value', 'vibration-value', 'airquality-value'];
-    const units = ['°C', '%', 'lux', 'Pa', 'g', '/100'];
+    const widgetIds = ['temp-value', 'humidity-value', 'light-value', 'pressure-value', 'differential-pressure-value', 'vibration-value', 'airquality-value'];
+    const units = ['°C', '%', 'lux', 'hPa', 'Pa', 'g', '/100'];
     
     widgetIds.forEach((id, index) => {
         const element = document.getElementById(id);
@@ -276,13 +297,22 @@ function updateCardValues(data) {
             lightCardElement.innerHTML = lightValue + '<span class="sensor-unit">lux</span>';
         }
         
-        // 압력 카드
+        // 대기압 카드 (BME688)
         const pressureCardElement = document.getElementById('pressure-card-value');
         if (pressureCardElement) {
             const pressureValue = (data.pressure !== undefined && data.pressure !== null) 
                 ? data.pressure.toFixed(1) 
                 : '--';
-            pressureCardElement.innerHTML = pressureValue + '<span class="sensor-unit">Pa</span>';
+            pressureCardElement.innerHTML = pressureValue + '<span class="sensor-unit">hPa</span>';
+        }
+        
+        // 차압 카드 (SDP810)
+        const differentialPressureCardElement = document.getElementById('differential-pressure-card-value');
+        if (differentialPressureCardElement) {
+            const pressureValue = (data.differential_pressure !== undefined && data.differential_pressure !== null) 
+                ? data.differential_pressure.toFixed(1) 
+                : '--';
+            differentialPressureCardElement.innerHTML = pressureValue + '<span class="sensor-unit">Pa</span>';
         }
         
         // 진동 카드
@@ -338,9 +368,16 @@ function setupCharts(data) {
         },
         pressure: {
             id: 'pressureChart',
+            label: '대기압 (hPa)',
+            color: '#8e44ad',
+            data: dummyHistory.pressure,
+            type: 'line'
+        },
+        differentialPressure: {
+            id: 'differentialPressureChart',
             label: '차압 (Pa)',
             color: '#4BC0C0',
-            data: dummyHistory.pressure,
+            data: dummyHistory.differential_pressure,
             type: 'line'
         },
         vibration: {
@@ -492,7 +529,8 @@ function setupDummyCharts() {
         temperature: Array.from({length: 24}, () => Math.random() * 8 + 20),
         humidity: Array.from({length: 24}, () => Math.random() * 35 + 40),
         light: Array.from({length: 24}, () => Math.random() * 1000 + 500),
-        pressure: Array.from({length: 24}, () => Math.random() * 15 + 5),
+        pressure: Array.from({length: 24}, () => Math.random() * 50 + 1000),  // 1000-1050 hPa
+        differential_pressure: Array.from({length: 24}, () => Math.random() * 100 - 50),  // ±50 Pa
         vibration: Array.from({length: 24}, () => Math.random() * 0.49 + 0.01),
         airquality: Array.from({length: 24}, () => Math.random() * 40 + 30)
     };
@@ -502,6 +540,7 @@ function setupDummyCharts() {
         humidity: dummyData.humidity[23],
         light: dummyData.light[23],
         pressure: dummyData.pressure[23],
+        differential_pressure: dummyData.differential_pressure[23],
         vibration: dummyData.vibration[23],
         air_quality: dummyData.airquality[23]
     });
@@ -514,6 +553,7 @@ function generateDummyHistory(hours, currentData) {
         humidity: [],
         light: [],
         pressure: [],
+        differential_pressure: [],
         vibration: [],
         airquality: []
     };
@@ -522,7 +562,8 @@ function generateDummyHistory(hours, currentData) {
         data.temperature.push(currentData.temperature + (Math.random() - 0.5) * 4);
         data.humidity.push(currentData.humidity + (Math.random() - 0.5) * 10);
         data.light.push(currentData.light + (Math.random() - 0.5) * 200);
-        data.pressure.push(currentData.pressure + (Math.random() - 0.5) * 5);
+        data.pressure.push(currentData.pressure + (Math.random() - 0.5) * 50);  // hPa 범위
+        data.differential_pressure.push(currentData.differential_pressure + (Math.random() - 0.5) * 20);  // Pa 범위
         data.vibration.push(currentData.vibration + (Math.random() - 0.5) * 0.1);
         data.airquality.push(currentData.air_quality + (Math.random() - 0.5) * 10);
     }

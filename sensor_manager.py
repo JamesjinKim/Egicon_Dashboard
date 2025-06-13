@@ -612,7 +612,8 @@ class SensorManager:
             'timestamp': timestamp,
             'temperature': None,
             'humidity': None,
-            'pressure': None,
+            'pressure': None,           # BME688 절대압력 (hPa)
+            'differential_pressure': None,  # SDP810 차압 (Pa)
             'light': None,
             'vibration': 0.0,  # 가상 센서 (고정값)
             'gas_resistance': None,
@@ -671,11 +672,10 @@ class SensorManager:
         
         # SDP810 데이터 읽기 (차압)
         if self.sdp810 and self.sdp810.connected:
-            pressure_data = self.sdp810.read_data()
-            if pressure_data is not None:
-                # BME688 압력이 없을 때만 SDP810 차압 사용
-                if result['pressure'] is None:
-                    result['pressure'] = pressure_data
+            differential_pressure_data = self.sdp810.read_data()
+            if differential_pressure_data is not None:
+                # SDP810 차압을 별도 필드에 저장
+                result['differential_pressure'] = differential_pressure_data
                 # 성공 시 오류 카운트 리셋
                 if 'sdp810' in self.sensor_error_count:
                     self.sensor_error_count['sdp810'] = 0

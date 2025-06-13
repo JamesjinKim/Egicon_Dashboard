@@ -315,6 +315,9 @@ body {
 .pressure .widget-color-bar { background-color: var(--pressure-color); }
 .pressure .widget-icon { background-color: var(--pressure-color); }
 
+.atmospheric-pressure .widget-color-bar { background-color: #8e44ad; }
+.atmospheric-pressure .widget-icon { background-color: #8e44ad; }
+
 .vibration .widget-color-bar { background-color: var(--vibration-color); }
 .vibration .widget-icon { background-color: var(--vibration-color); }
 
