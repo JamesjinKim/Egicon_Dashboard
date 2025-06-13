@@ -237,36 +237,66 @@ class WebI2CScanner:
             return {"error": str(e)}
     
     def _test_sht40(self, bus, addr: int) -> Dict:
-        """SHT40 온습도센서 테스트"""
+        """SHT40 온습도센서 테스트 (저수준 I2C 통신)"""
         try:
-            # 소프트 리셋
-            bus.write_byte(addr, 0x94)
-            time.sleep(0.002)
+            # 소프트 리셋 (저수준 I2C 메시지 사용)
+            write_msg = smbus2.i2c_msg.write(addr, [0x94])
+            bus.i2c_rdwr(write_msg)
+            time.sleep(0.01)
             
             # 고정밀 측정 명령
-            bus.write_byte(addr, 0xFD)
+            write_msg = smbus2.i2c_msg.write(addr, [0xFD])
+            bus.i2c_rdwr(write_msg)
             time.sleep(0.02)
             
             # 6바이트 데이터 읽기
-            data = []
-            for i in range(6):
-                data.append(bus.read_byte(addr))
-                time.sleep(0.001)
+            read_msg = smbus2.i2c_msg.read(addr, 6)
+            bus.i2c_rdwr(read_msg)
+            
+            # 읽은 데이터 처리
+            data = list(read_msg)
             
             if len(data) >= 6:
-                temp_raw = (data[0] << 8) | data[1]
-                hum_raw = (data[3] << 8) | data[4]
+                # 온도 및 습도 데이터 분리
+                t_data = [data[0], data[1]]
+                t_crc = data[2]
+                rh_data = [data[3], data[4]]
+                rh_crc = data[5]
                 
-                temperature = -45 + 175 * temp_raw / 65535
-                humidity = 100 * hum_raw / 65535
+                # CRC 검증 (간단한 버전)
+                def calculate_crc(data):
+                    POLYNOMIAL = 0x31
+                    CRC = 0xFF
+                    for byte in data:
+                        CRC ^= byte
+                        for _ in range(8):
+                            if CRC & 0x80:
+                                CRC = ((CRC << 1) ^ POLYNOMIAL) & 0xFF
+                            else:
+                                CRC = (CRC << 1) & 0xFF
+                    return CRC
+                
+                t_crc_ok = calculate_crc(t_data) == t_crc
+                rh_crc_ok = calculate_crc(rh_data) == rh_crc
+                
+                # 원시 데이터를 실제 값으로 변환
+                t_raw = (t_data[0] << 8) | t_data[1]
+                rh_raw = (rh_data[0] << 8) | rh_data[1]
+                
+                # 데이터시트의 변환 공식 적용
+                temperature = -45 + 175 * (t_raw / 65535.0)
+                humidity = -6 + 125 * (rh_raw / 65535.0)
+                humidity = max(0, min(100, humidity))  # 0-100% 범위 제한
                 
                 if -40 <= temperature <= 125 and 0 <= humidity <= 100:
+                    crc_status = "통과" if (t_crc_ok and rh_crc_ok) else "실패"
                     return {
                         "success": True,
                         "type": "온습도센서 (SHT40)",
                         "values": {
                             "온도": f"{temperature:.2f}°C",
-                            "습도": f"{humidity:.2f}%RH"
+                            "습도": f"{humidity:.2f}%RH",
+                            "CRC 검증": crc_status
                         }
                     }
             
