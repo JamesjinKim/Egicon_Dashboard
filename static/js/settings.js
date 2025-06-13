@@ -355,13 +355,40 @@ function displayTestResult(testResult) {
     `;
     
     if (testResult.values) {
-        for (const [key, value] of Object.entries(testResult.values)) {
-            html += `
-                <div class="value-item">
-                    <span class="value-label">${key}:</span>
-                    <span class="value-data">${value}</span>
-                </div>
-            `;
+        // SHT40 센서의 경우 온도 → 습도 → CRC 검증 순서로 표시
+        if (testResult.type && testResult.type.includes('SHT40')) {
+            const orderedKeys = ['온도', '습도', 'CRC 검증'];
+            for (const key of orderedKeys) {
+                if (testResult.values[key]) {
+                    html += `
+                        <div class="value-item">
+                            <span class="value-label">${key}:</span>
+                            <span class="value-data">${testResult.values[key]}</span>
+                        </div>
+                    `;
+                }
+            }
+            // 기타 추가 값들이 있다면 표시
+            for (const [key, value] of Object.entries(testResult.values)) {
+                if (!orderedKeys.includes(key)) {
+                    html += `
+                        <div class="value-item">
+                            <span class="value-label">${key}:</span>
+                            <span class="value-data">${value}</span>
+                        </div>
+                    `;
+                }
+            }
+        } else {
+            // 다른 센서는 기존 방식 사용
+            for (const [key, value] of Object.entries(testResult.values)) {
+                html += `
+                    <div class="value-item">
+                        <span class="value-label">${key}:</span>
+                        <span class="value-data">${value}</span>
+                    </div>
+                `;
+            }
         }
     }
     
