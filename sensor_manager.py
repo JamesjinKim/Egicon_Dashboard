@@ -401,28 +401,28 @@ class SensorManager:
         print("🔍 SHT40 센서 검색 중...")
         self.sht40_sensors = self._find_all_sht40()
         if self.sht40_sensors:
-            self.sht40 = self.sht40_sensors[0]  # 레거시 호환성
+            self.sht40 = self.sht40_sensors[0]['sensor']  # 레거시 호환성 - 센서 객체 참조
             success_count += len(self.sht40_sensors)
         
         # BME688 센서들 검색
         print("🔍 BME688 센서 검색 중...")
         self.bme688_sensors = self._find_all_bme688()
         if self.bme688_sensors:
-            self.bme688 = self.bme688_sensors[0]  # 레거시 호환성
+            self.bme688 = self.bme688_sensors[0]['sensor']  # 레거시 호환성 - 센서 객체 참조
             success_count += len(self.bme688_sensors)
         
         # BH1750 센서들 검색  
         print("🔍 BH1750 센서 검색 중...")
         self.bh1750_sensors = self._find_all_bh1750()
         if self.bh1750_sensors:
-            self.bh1750 = self.bh1750_sensors[0]  # 레거시 호환성
+            self.bh1750 = self.bh1750_sensors[0]['sensor']  # 레거시 호환성 - 센서 객체 참조
             success_count += len(self.bh1750_sensors)
         
         # SDP810 센서들 검색
         print("🔍 SDP810 센서 검색 중...")
         self.sdp810_sensors = self._find_all_sdp810()
         if self.sdp810_sensors:
-            self.sdp810 = self.sdp810_sensors[0]  # 레거시 호환성
+            self.sdp810 = self.sdp810_sensors[0]['sensor']  # 레거시 호환성 - 센서 객체 참조
             success_count += len(self.sdp810_sensors)
         
         total_sensors = 4
