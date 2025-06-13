@@ -356,19 +356,27 @@ class BH1750Sensor:
 
 
 class SensorManager:
-    """라즈베리파이 전용 센서 관리자"""
+    """라즈베리파이 전용 센서 관리자 (멀티 센서 지원)"""
     
     def __init__(self):
+        # 멀티 센서 지원을 위한 리스트 구조
+        self.sht40_sensors = []    # SHT40 센서들
+        self.bme688_sensors = []   # BME688 센서들  
+        self.bh1750_sensors = []   # BH1750 센서들
+        self.sdp810_sensors = []   # SDP810 센서들
+        
+        # 레거시 호환성을 위한 단일 참조 (첫 번째 센서)
+        self.sht40 = None
         self.bme688 = None
         self.bh1750 = None
-        self.sht40 = None
         self.sdp810 = None
+        
         self.buses = {}
         self.last_sensor_config = {}  # 마지막 센서 구성 저장
         self.sensor_error_count = {}  # 센서별 오류 카운트
         self.auto_rescan_enabled = True  # 자동 재검색 활성화
         
-        print("🚀 센서 관리자 초기화 (라즈베리파이 전용)")
+        print("🚀 센서 관리자 초기화 (라즈베리파이 전용 - 멀티 센서 지원)")
     
     def initialize_sensors(self):
         """센서 초기화"""
@@ -389,29 +397,33 @@ class SensorManager:
             print("❌ 사용 가능한 I2C 버스가 없습니다")
             return False
         
-        # SHT40 센서 검색 (우선순위 1)
+        # SHT40 센서들 검색 (우선순위 1)
         print("🔍 SHT40 센서 검색 중...")
-        self.sht40 = self._find_sht40()
-        if self.sht40:
-            success_count += 1
+        self.sht40_sensors = self._find_all_sht40()
+        if self.sht40_sensors:
+            self.sht40 = self.sht40_sensors[0]  # 레거시 호환성
+            success_count += len(self.sht40_sensors)
         
-        # BME688 센서 검색
+        # BME688 센서들 검색
         print("🔍 BME688 센서 검색 중...")
-        self.bme688 = self._find_bme688()
-        if self.bme688:
-            success_count += 1
+        self.bme688_sensors = self._find_all_bme688()
+        if self.bme688_sensors:
+            self.bme688 = self.bme688_sensors[0]  # 레거시 호환성
+            success_count += len(self.bme688_sensors)
         
-        # BH1750 센서 검색  
+        # BH1750 센서들 검색  
         print("🔍 BH1750 센서 검색 중...")
-        self.bh1750 = self._find_bh1750()
-        if self.bh1750:
-            success_count += 1
+        self.bh1750_sensors = self._find_all_bh1750()
+        if self.bh1750_sensors:
+            self.bh1750 = self.bh1750_sensors[0]  # 레거시 호환성
+            success_count += len(self.bh1750_sensors)
         
-        # SDP810 센서 검색
+        # SDP810 센서들 검색
         print("🔍 SDP810 센서 검색 중...")
-        self.sdp810 = self._find_sdp810()
-        if self.sdp810:
-            success_count += 1
+        self.sdp810_sensors = self._find_all_sdp810()
+        if self.sdp810_sensors:
+            self.sdp810 = self.sdp810_sensors[0]  # 레거시 호환성
+            success_count += len(self.sdp810_sensors)
         
         total_sensors = 4
         print(f"📊 센서 초기화 완료: {success_count}/{total_sensors}개 센서 연결")
@@ -421,53 +433,98 @@ class SensorManager:
         
         return success_count > 0  # 하나라도 연결되면 성공
     
-    def _find_sht40(self):
-        """온습도센서 (SHT40) 찾기"""
+    def _find_all_sht40(self):
+        """모든 SHT40 센서들 찾기"""
+        found_sensors = []
+        sensor_count = 0
+        
         for bus_num, bus in self.buses.items():
             for addr in [0x44, 0x45]:  # SHT40 일반적인 주소
                 try:
                     sht40 = SHT40Sensor(bus, addr)
                     if sht40.connected:
-                        print(f"✅ SHT40 센서 발견 (버스 {bus_num}, 주소 0x{addr:02X})")
-                        return sht40
+                        sensor_count += 1
+                        alias = f"SHT40-{sensor_count}"
+                        sensor_info = {
+                            'sensor': sht40,
+                            'bus': bus_num,
+                            'address': addr,
+                            'alias': alias,
+                            'id': f"sht40_{sensor_count}"
+                        }
+                        found_sensors.append(sensor_info)
+                        print(f"✅ SHT40 센서 발견 (버스 {bus_num}, 주소 0x{addr:02X}) - {alias}")
                 except Exception as e:
                     continue
         
-        print("❌ SHT40 센서를 찾을 수 없습니다")
-        return None
+        if not found_sensors:
+            print("❌ SHT40 센서를 찾을 수 없습니다")
+        
+        return found_sensors
     
-    def _find_bme688(self):
-        """BME688 센서 찾기"""
+    def _find_all_bme688(self):
+        """모든 BME688 센서들 찾기"""
+        found_sensors = []
+        sensor_count = 0
+        
         for bus_num, bus in self.buses.items():
             for addr in [0x76, 0x77]:  # BME688 일반적인 주소
                 try:
                     bme688 = BME688Sensor(bus, addr)
                     if bme688.connected:
-                        print(f"✅ BME688 센서 발견 (버스 {bus_num}, 주소 0x{addr:02X})")
-                        return bme688
+                        sensor_count += 1
+                        alias = f"BME688-{sensor_count}"
+                        sensor_info = {
+                            'sensor': bme688,
+                            'bus': bus_num,
+                            'address': addr,
+                            'alias': alias,
+                            'id': f"bme688_{sensor_count}"
+                        }
+                        found_sensors.append(sensor_info)
+                        print(f"✅ BME688 센서 발견 (버스 {bus_num}, 주소 0x{addr:02X}) - {alias}")
                 except Exception as e:
                     continue
         
-        print("❌ BME688 센서를 찾을 수 없습니다")
-        return None
+        if not found_sensors:
+            print("❌ BME688 센서를 찾을 수 없습니다")
+        
+        return found_sensors
     
-    def _find_bh1750(self):
-        """BH1750 센서 찾기"""
+    def _find_all_bh1750(self):
+        """모든 BH1750 센서들 찾기"""
+        found_sensors = []
+        sensor_count = 0
+        
         for bus_num, bus in self.buses.items():
             for addr in [0x23, 0x5C]:  # BH1750 일반적인 주소
                 try:
                     bh1750 = BH1750Sensor(bus, addr)
                     if bh1750.connected:
-                        print(f"✅ BH1750 센서 발견 (버스 {bus_num}, 주소 0x{addr:02X})")
-                        return bh1750
+                        sensor_count += 1
+                        alias = f"BH1750-{sensor_count}"
+                        sensor_info = {
+                            'sensor': bh1750,
+                            'bus': bus_num,
+                            'address': addr,
+                            'alias': alias,
+                            'id': f"bh1750_{sensor_count}"
+                        }
+                        found_sensors.append(sensor_info)
+                        print(f"✅ BH1750 센서 발견 (버스 {bus_num}, 주소 0x{addr:02X}) - {alias}")
                 except Exception as e:
                     continue
         
-        print("❌ BH1750 센서를 찾을 수 없습니다")
-        return None
+        if not found_sensors:
+            print("❌ BH1750 센서를 찾을 수 없습니다")
+        
+        return found_sensors
     
-    def _find_sdp810(self):
-        """SDP810 차압센서 찾기 (simpleEddy.py 방식)"""
+    def _find_all_sdp810(self):
+        """모든 SDP810 센서들 찾기 (simpleEddy.py 방식)"""
+        found_sensors = []
+        sensor_count = 0
+        
         for bus_num, bus in self.buses.items():
             for addr in [0x25, 0x26]:  # SDP810 일반적인 주소
                 try:
@@ -478,15 +535,26 @@ class SensorManager:
                         # 통신 성공 시 SDP810Sensor 객체 생성
                         sdp810 = SDP810Sensor(bus, addr)
                         if sdp810.connected:
+                            sensor_count += 1
+                            alias = f"SDP810-{sensor_count}"
                             status = "✓" if crc_ok else "⚠"
-                            print(f"✅ SDP810 센서 발견 (버스 {bus_num}, 주소 0x{addr:02X}) - {pressure:.1f} Pa {status}")
-                            return sdp810
+                            sensor_info = {
+                                'sensor': sdp810,
+                                'bus': bus_num,
+                                'address': addr,
+                                'alias': alias,
+                                'id': f"sdp810_{sensor_count}"
+                            }
+                            found_sensors.append(sensor_info)
+                            print(f"✅ SDP810 센서 발견 (버스 {bus_num}, 주소 0x{addr:02X}) - {alias} {pressure:.1f} Pa {status}")
                 except Exception as e:
                     print(f"⚠️ SDP810 테스트 중 오류 (버스 {bus_num}, 주소 0x{addr:02X}): {e}")
                     continue
         
-        print("❌ SDP810 센서를 찾을 수 없습니다")
-        return None
+        if not found_sensors:
+            print("❌ SDP810 센서를 찾을 수 없습니다")
+        
+        return found_sensors
     
     def _test_sdp810_direct(self, bus, address):
         """SDP810 직접 통신 테스트 (simpleEddy.py 방식)"""
@@ -723,6 +791,122 @@ class SensorManager:
                     self.sensor_error_count['sdp810'] = 0
             else:
                 self._handle_sensor_error('sdp810')
+        
+        return result
+    
+    def read_all_sensors_multi(self):
+        """모든 센서 데이터 읽기 (멀티 센서 지원)"""
+        result = {
+            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'sensors': {
+                'sht40': [],
+                'bme688': [],
+                'bh1750': [],
+                'sdp810': []
+            },
+            'sensor_status': {
+                'sht40': len(self.sht40_sensors) > 0,
+                'bme688': len(self.bme688_sensors) > 0,
+                'bh1750': len(self.bh1750_sensors) > 0,
+                'sdp810': len(self.sdp810_sensors) > 0
+            }
+        }
+        
+        # SHT40 센서들 데이터 읽기
+        for sensor_info in self.sht40_sensors:
+            sensor = sensor_info['sensor']
+            if sensor and sensor.connected:
+                data = sensor.read_data()
+                if data:
+                    result['sensors']['sht40'].append({
+                        'id': sensor_info['id'],
+                        'alias': sensor_info['alias'],
+                        'bus': sensor_info['bus'],
+                        'address': f"0x{sensor_info['address']:02X}",
+                        'connected': True,
+                        'data': data
+                    })
+                else:
+                    result['sensors']['sht40'].append({
+                        'id': sensor_info['id'],
+                        'alias': sensor_info['alias'],
+                        'bus': sensor_info['bus'],
+                        'address': f"0x{sensor_info['address']:02X}",
+                        'connected': False,
+                        'data': None
+                    })
+        
+        # BME688 센서들 데이터 읽기
+        for sensor_info in self.bme688_sensors:
+            sensor = sensor_info['sensor']
+            if sensor and sensor.connected:
+                data = sensor.read_data()
+                if data:
+                    result['sensors']['bme688'].append({
+                        'id': sensor_info['id'],
+                        'alias': sensor_info['alias'],
+                        'bus': sensor_info['bus'],
+                        'address': f"0x{sensor_info['address']:02X}",
+                        'connected': True,
+                        'data': data
+                    })
+                else:
+                    result['sensors']['bme688'].append({
+                        'id': sensor_info['id'],
+                        'alias': sensor_info['alias'],
+                        'bus': sensor_info['bus'],
+                        'address': f"0x{sensor_info['address']:02X}",
+                        'connected': False,
+                        'data': None
+                    })
+        
+        # BH1750 센서들 데이터 읽기
+        for sensor_info in self.bh1750_sensors:
+            sensor = sensor_info['sensor']
+            if sensor and sensor.connected:
+                data = sensor.read_data()
+                if data is not None:
+                    result['sensors']['bh1750'].append({
+                        'id': sensor_info['id'],
+                        'alias': sensor_info['alias'],
+                        'bus': sensor_info['bus'],
+                        'address': f"0x{sensor_info['address']:02X}",
+                        'connected': True,
+                        'data': {'light': data}
+                    })
+                else:
+                    result['sensors']['bh1750'].append({
+                        'id': sensor_info['id'],
+                        'alias': sensor_info['alias'],
+                        'bus': sensor_info['bus'],
+                        'address': f"0x{sensor_info['address']:02X}",
+                        'connected': False,
+                        'data': None
+                    })
+        
+        # SDP810 센서들 데이터 읽기
+        for sensor_info in self.sdp810_sensors:
+            sensor = sensor_info['sensor']
+            if sensor and sensor.connected:
+                data = sensor.read_data()
+                if data is not None:
+                    result['sensors']['sdp810'].append({
+                        'id': sensor_info['id'],
+                        'alias': sensor_info['alias'],
+                        'bus': sensor_info['bus'],
+                        'address': f"0x{sensor_info['address']:02X}",
+                        'connected': True,
+                        'data': {'differential_pressure': data}
+                    })
+                else:
+                    result['sensors']['sdp810'].append({
+                        'id': sensor_info['id'],
+                        'alias': sensor_info['alias'],
+                        'bus': sensor_info['bus'],
+                        'address': f"0x{sensor_info['address']:02X}",
+                        'connected': False,
+                        'data': None
+                    })
         
         return result
     

@@ -129,6 +129,54 @@ def get_current_data():
             'error': str(e)
         })
 
+@app.route('/api/current-multi', methods=['GET'])
+def get_current_data_multi():
+    """현재 센서 데이터 조회 (멀티 센서 지원)"""
+    global sensor_manager
+    
+    try:
+        if sensor_manager:
+            # 멀티 센서 데이터 읽기
+            sensor_data = sensor_manager.read_all_sensors_multi()
+            return jsonify(sensor_data)
+        else:
+            # 센서 매니저가 없을 때 기본 응답
+            return jsonify({
+                'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                'sensors': {
+                    'sht40': [],
+                    'bme688': [],
+                    'bh1750': [],
+                    'sdp810': []
+                },
+                'sensor_status': {
+                    'sht40': False,
+                    'bme688': False,
+                    'bh1750': False,
+                    'sdp810': False
+                }
+            })
+        
+    except Exception as e:
+        print(f"멀티 센서 읽기 오류: {e}")
+        # 오류 발생 시도 기본 응답 반환
+        return jsonify({
+            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'sensors': {
+                'sht40': [],
+                'bme688': [],
+                'bh1750': [],
+                'sdp810': []
+            },
+            'sensor_status': {
+                'sht40': False,
+                'bme688': False,
+                'bh1750': False,
+                'sdp810': False
+            },
+            'error': str(e)
+        })
+
 @app.route('/api/status', methods=['GET'])
 def get_sensor_status():
     """센서 연결 상태"""
@@ -378,11 +426,11 @@ if __name__ == '__main__':
     else:
         print("\n❌ 센서 연결 실패 - 서버만 실행됩니다")
     
-    print(f"\n🚀 서버 시작: http://0.0.0.0:5002")
+    print(f"\n🚀 서버 시작: http://0.0.0.0:5003")
     print("Ctrl+C로 종료\n")
     
     try:
-        app.run(debug=False, host='0.0.0.0', port=5002, threaded=True)
+        app.run(debug=False, host='0.0.0.0', port=5003, threaded=True)
     except KeyboardInterrupt:
         print("\n서버 종료 중...")
         if sensor_manager:

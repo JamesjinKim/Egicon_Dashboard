@@ -88,8 +88,8 @@ async function loadSensorData() {
     showLoading();
     
     try {
-        // 현재 센서 데이터 가져오기
-        const response = await fetch(`${API_URL}/current`);
+        // 현재 센서 데이터 가져오기 (멀티 센서 지원)
+        const response = await fetch(`${API_URL}/current-multi`);
         
         if (!response.ok) {
             throw new Error('서버 응답 오류');
@@ -121,8 +121,8 @@ async function loadSensorData() {
 // 센서 데이터 업데이트
 async function updateSensorData() {
     try {
-        // 현재 데이터 가져오기
-        const currentResponse = await fetch(`${API_URL}/current`);
+        // 현재 데이터 가져오기 (멀티 센서 지원)
+        const currentResponse = await fetch(`${API_URL}/current-multi`);
         
         if (!currentResponse.ok) {
             throw new Error('현재 데이터 조회 오류');
@@ -163,40 +163,36 @@ function updateAllSensorDisplays(data) {
     }
 }
 
-// 개별 센서 섹션 업데이트
+// 개별 센서 섹션 업데이트 (멀티 센서 지원)
 function updateSensorSection(sensorType, data) {
-    const sensorStatus = data.sensor_status && data.sensor_status[sensorType];
+    const sensorArray = data.sensors && data.sensors[sensorType] ? data.sensors[sensorType] : [];
     const statusElement = document.getElementById(SENSOR_WIDGETS[sensorType].status);
     const sectionElement = document.getElementById(`${sensorType}-section`);
     
-    if (sensorStatus) {
-        // 센서 연결됨
+    if (sensorArray.length > 0) {
+        // 센서가 하나 이상 연결됨
+        const connectedSensors = sensorArray.filter(s => s.connected);
+        
         if (statusElement) {
-            statusElement.textContent = '연결됨';
-            statusElement.className = 'sensor-status-indicator connected';
+            if (connectedSensors.length > 0) {
+                statusElement.textContent = `연결됨 (${connectedSensors.length}개)`;
+                statusElement.className = 'sensor-status-indicator connected';
+            } else {
+                statusElement.textContent = '오류';
+                statusElement.className = 'sensor-status-indicator error';
+            }
         }
+        
         if (sectionElement) {
             sectionElement.classList.remove('hidden');
         }
         
-        // 센서별 데이터 업데이트
-        switch (sensorType) {
-            case 'sht40':
-                updateSensorWidget('sht40', 'temperature', data.temperature, '°C');
-                updateSensorWidget('sht40', 'humidity', data.humidity, '%');
-                break;
-            case 'bme688':
-                updateSensorWidget('bme688', 'temperature', data.temperature, '°C');
-                updateSensorWidget('bme688', 'humidity', data.humidity, '%');
-                updateSensorWidget('bme688', 'pressure', data.pressure, 'hPa');
-                updateSensorWidget('bme688', 'airquality', data.air_quality, '/100');
-                break;
-            case 'sdp810':
-                updateSensorWidget('sdp810', 'pressure', data.differential_pressure, 'Pa');
-                break;
-            case 'bh1750':
-                updateSensorWidget('bh1750', 'light', data.light, 'lux');
-                break;
+        // 첫 번째 연결된 센서의 데이터를 위젯에 표시 (레거시 호환성)
+        if (connectedSensors.length > 0) {
+            const firstSensor = connectedSensors[0];
+            updateSensorWidgetFromMulti(sensorType, firstSensor.data, sensorArray.length);
+        } else {
+            setDefaultSensorValues(sensorType);
         }
     } else {
         // 센서 연결 안됨
@@ -206,6 +202,30 @@ function updateSensorSection(sensorType, data) {
         }
         // 섹션을 숨기지 않고 "센서 없음" 상태로 표시
         setDefaultSensorValues(sensorType);
+    }
+}
+
+// 멀티 센서 데이터에서 위젯 업데이트
+function updateSensorWidgetFromMulti(sensorType, data, sensorCount) {
+    if (!data) return;
+    
+    switch (sensorType) {
+        case 'sht40':
+            updateSensorWidget('sht40', 'temperature', data.temperature, '°C');
+            updateSensorWidget('sht40', 'humidity', data.humidity, '%');
+            break;
+        case 'bme688':
+            updateSensorWidget('bme688', 'temperature', data.temperature, '°C');
+            updateSensorWidget('bme688', 'humidity', data.humidity, '%');
+            updateSensorWidget('bme688', 'pressure', data.pressure, 'hPa');
+            updateSensorWidget('bme688', 'airquality', data.air_quality, '/100');
+            break;
+        case 'sdp810':
+            updateSensorWidget('sdp810', 'pressure', data.differential_pressure, 'Pa');
+            break;
+        case 'bh1750':
+            updateSensorWidget('bh1750', 'light', data.light, 'lux');
+            break;
     }
 }
 
@@ -297,7 +317,7 @@ function setupAllCharts(data) {
     setupCombinedChart(timeLabels, dummyHistory);
 }
 
-// 센서별 차트 설정
+// 센서별 차트 설정 (멀티 센서 지원)
 function setupSensorCharts(sensorType, dataTypes, timeLabels, dummyHistory, currentData) {
     dataTypes.forEach(dataType => {
         const chartId = SENSOR_CHARTS[sensorType][dataType];
@@ -309,13 +329,130 @@ function setupSensorCharts(sensorType, dataTypes, timeLabels, dummyHistory, curr
                 charts[chartId].destroy();
             }
             
-            const config = getChartConfig(sensorType, dataType, timeLabels, dummyHistory);
+            const config = getMultiSensorChartConfig(sensorType, dataType, timeLabels, dummyHistory, currentData);
             charts[chartId] = new Chart(ctx.getContext('2d'), config);
         }
     });
 }
 
-// 차트 설정 가져오기
+// 멀티 센서 차트 설정 가져오기
+function getMultiSensorChartConfig(sensorType, dataType, timeLabels, dummyHistory, currentData) {
+    const sensorArray = currentData.sensors && currentData.sensors[sensorType] ? currentData.sensors[sensorType] : [];
+    const connectedSensors = sensorArray.filter(s => s.connected);
+    
+    const baseColors = {
+        sht40: { temperature: '#ff6b6b', humidity: '#4ecdc4' },
+        bme688: { temperature: '#ff9f43', humidity: '#54a0ff', pressure: '#5f27cd', airquality: '#00d2d3' },
+        sdp810: { pressure: '#ff3838' },
+        bh1750: { light: '#ffb142' },
+        virtual: { vibration: '#8c7ae6' }
+    };
+    
+    const units = {
+        temperature: '°C',
+        humidity: '%',
+        pressure: sensorType === 'sdp810' ? 'Pa' : 'hPa',
+        airquality: '/100',
+        light: 'lux',
+        vibration: 'g'
+    };
+    
+    const labels = {
+        temperature: '온도',
+        humidity: '습도',
+        pressure: sensorType === 'sdp810' ? '차압' : '절대압력',
+        airquality: '공기질',
+        light: '조도',
+        vibration: '진동'
+    };
+    
+    const chartType = (dataType === 'light' || dataType === 'vibration') ? 'bar' : 'line';
+    const baseColor = baseColors[sensorType][dataType];
+    
+    // 멀티 센서를 위한 데이터셋 생성
+    const datasets = [];
+    
+    if (connectedSensors.length > 1) {
+        // 여러 센서가 있을 경우 각각을 다른 라인으로
+        connectedSensors.forEach((sensor, index) => {
+            const colorVariation = adjustColorBrightness(baseColor, index * 30);
+            const dataKey = dataType === 'pressure' && sensorType === 'sdp810' ? 'differential_pressure' : dataType;
+            const data = generateSensorHistory(dummyHistory[dataKey] || Array(24).fill(0), index);
+            
+            datasets.push({
+                label: `${sensor.alias} ${labels[dataType]} (${units[dataType]})`,
+                data: data,
+                borderColor: colorVariation,
+                backgroundColor: chartType === 'bar' ? colorVariation + 'B3' : colorVariation + '1A',
+                tension: 0.4,
+                fill: chartType !== 'bar'
+            });
+        });
+    } else {
+        // 센서가 하나이거나 없을 경우 기본 처리
+        const dataKey = dataType === 'pressure' && sensorType === 'sdp810' ? 'differential_pressure' : dataType;
+        const data = dummyHistory[dataKey] || Array(24).fill(0);
+        const alias = connectedSensors.length > 0 ? connectedSensors[0].alias : `${sensorType.toUpperCase()}`;
+        
+        datasets.push({
+            label: `${alias} ${labels[dataType]} (${units[dataType]})`,
+            data: data,
+            borderColor: baseColor,
+            backgroundColor: chartType === 'bar' ? baseColor + 'B3' : baseColor + '1A',
+            tension: 0.4,
+            fill: chartType !== 'bar'
+        });
+    }
+    
+    return {
+        type: chartType,
+        data: {
+            labels: timeLabels,
+            datasets: datasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { 
+                    display: connectedSensors.length > 1,
+                    position: 'top'
+                },
+                title: {
+                    display: true,
+                    text: `${sensorType.toUpperCase()} ${labels[dataType]}`,
+                    font: { size: 12 }
+                }
+            },
+            scales: {
+                x: { display: false },
+                y: { beginAtZero: false }
+            }
+        }
+    };
+}
+
+// 색상 밝기 조정 함수
+function adjustColorBrightness(color, percent) {
+    const num = parseInt(color.replace("#", ""), 16);
+    const amt = Math.round(2.55 * percent);
+    const R = (num >> 16) + amt;
+    const G = (num >> 8 & 0x00FF) + amt;
+    const B = (num & 0x0000FF) + amt;
+    return "#" + (0x1000000 + (R < 255 ? R < 1 ? 0 : R : 255) * 0x10000 +
+        (G < 255 ? G < 1 ? 0 : G : 255) * 0x100 +
+        (B < 255 ? B < 1 ? 0 : B : 255)).toString(16).slice(1);
+}
+
+// 센서별 히스토리 데이터 생성 (약간의 변화 추가)
+function generateSensorHistory(baseData, sensorIndex) {
+    return baseData.map(value => {
+        const variation = (Math.random() - 0.5) * 2 * (sensorIndex + 1);
+        return value + variation;
+    });
+}
+
+// 차트 설정 가져오기 (레거시 호환성)
 function getChartConfig(sensorType, dataType, timeLabels, dummyHistory) {
     const colors = {
         sht40: { temperature: '#ff6b6b', humidity: '#4ecdc4' },
