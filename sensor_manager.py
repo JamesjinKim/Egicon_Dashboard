@@ -10,6 +10,7 @@ import random
 import math
 from datetime import datetime
 import constants as const
+from sdp810_sensor import SDP810Sensor
 
 class BME688Sensor:
     """BME688 환경센서 클래스 (온도, 습도, 압력, 가스저항)"""
@@ -361,6 +362,7 @@ class SensorManager:
         self.bme688 = None
         self.bh1750 = None
         self.sht40 = None
+        self.sdp810 = None
         self.buses = {}
         self.last_sensor_config = {}  # 마지막 센서 구성 저장
         self.sensor_error_count = {}  # 센서별 오류 카운트
@@ -405,7 +407,13 @@ class SensorManager:
         if self.bh1750:
             success_count += 1
         
-        total_sensors = 3
+        # SDP810 센서 검색
+        print("🔍 SDP810 센서 검색 중...")
+        self.sdp810 = self._find_sdp810()
+        if self.sdp810:
+            success_count += 1
+        
+        total_sensors = 4
         print(f"📊 센서 초기화 완료: {success_count}/{total_sensors}개 센서 연결")
         
         # 현재 센서 구성 저장
@@ -458,12 +466,28 @@ class SensorManager:
         print("❌ BH1750 센서를 찾을 수 없습니다")
         return None
     
+    def _find_sdp810(self):
+        """SDP810 차압센서 찾기"""
+        for bus_num, bus in self.buses.items():
+            for addr in [0x25, 0x26]:  # SDP810 일반적인 주소
+                try:
+                    sdp810 = SDP810Sensor(bus, addr)
+                    if sdp810.connected:
+                        print(f"✅ SDP810 센서 발견 (버스 {bus_num}, 주소 0x{addr:02X})")
+                        return sdp810
+                except Exception as e:
+                    continue
+        
+        print("❌ SDP810 센서를 찾을 수 없습니다")
+        return None
+    
     def _update_sensor_config(self):
         """현재 센서 구성 저장"""
         self.last_sensor_config = {
             'sht40': self.sht40 is not None and self.sht40.connected,
             'bme688': self.bme688 is not None and self.bme688.connected,
-            'bh1750': self.bh1750 is not None and self.bh1750.connected
+            'bh1750': self.bh1750 is not None and self.bh1750.connected,
+            'sdp810': self.sdp810 is not None and self.sdp810.connected
         }
         print(f"🔧 센서 구성 업데이트: {self.last_sensor_config}")
     
@@ -484,6 +508,8 @@ class SensorManager:
                 self.bme688 = None
             elif sensor_name == 'sht40':
                 self.sht40 = None
+            elif sensor_name == 'sdp810':
+                self.sdp810 = None
             
             # 오류 카운트 리셋
             self.sensor_error_count[sensor_name] = 0
@@ -526,6 +552,13 @@ class SensorManager:
             if self.bh1750:
                 print("✅ BH1750 센서 재연결됨")
         
+        # SDP810 재검색
+        if not self.sdp810:
+            print("🔍 SDP810 센서 재검색 중...")
+            self.sdp810 = self._find_sdp810()
+            if self.sdp810:
+                print("✅ SDP810 센서 재연결됨")
+        
         # 센서 구성 업데이트
         self._update_sensor_config()
     
@@ -560,6 +593,13 @@ class SensorManager:
                 found_new = True
                 print("🆕 BH1750 센서 즉시 감지됨!")
         
+        if not self.sdp810:
+            new_sdp810 = self._find_sdp810()
+            if new_sdp810:
+                self.sdp810 = new_sdp810
+                found_new = True
+                print("🆕 SDP810 센서 즉시 감지됨!")
+        
         if found_new:
             self._update_sensor_config()
             print("✨ 센서 교체 완료 - 데이터 수집 재개")
@@ -582,7 +622,7 @@ class SensorManager:
                 'bme688': self.bme688 is not None and self.bme688.connected,
                 'bh1750': self.bh1750 is not None and self.bh1750.connected,
                 'sht40': self.sht40 is not None and self.sht40.connected,
-                'sdp810': False  # 추후 구현
+                'sdp810': self.sdp810 is not None and self.sdp810.connected
             }
         }
         
@@ -629,6 +669,19 @@ class SensorManager:
             else:
                 self._handle_sensor_error('bh1750')
         
+        # SDP810 데이터 읽기 (차압)
+        if self.sdp810 and self.sdp810.connected:
+            pressure_data = self.sdp810.read_data()
+            if pressure_data is not None:
+                # BME688 압력이 없을 때만 SDP810 차압 사용
+                if result['pressure'] is None:
+                    result['pressure'] = pressure_data
+                # 성공 시 오류 카운트 리셋
+                if 'sdp810' in self.sensor_error_count:
+                    self.sensor_error_count['sdp810'] = 0
+            else:
+                self._handle_sensor_error('sdp810')
+        
         return result
     
     def rescan_sensors_now(self):
@@ -642,6 +695,7 @@ class SensorManager:
         self.sht40 = self._find_sht40()
         self.bme688 = self._find_bme688()
         self.bh1750 = self._find_bh1750()
+        self.sdp810 = self._find_sdp810()
         
         # 오류 카운트 리셋
         self.sensor_error_count.clear()
@@ -668,12 +722,14 @@ class SensorManager:
         sht40_connected = self.sht40 is not None and self.sht40.connected
         bme688_connected = self.bme688 is not None and self.bme688.connected
         bh1750_connected = self.bh1750 is not None and self.bh1750.connected
+        sdp810_connected = self.sdp810 is not None and self.sdp810.connected
         
         return {
             'sht40_connected': sht40_connected,
             'bme688_connected': bme688_connected,
             'bh1750_connected': bh1750_connected,
-            'sensor_count': int(sht40_connected) + int(bme688_connected) + int(bh1750_connected)
+            'sdp810_connected': sdp810_connected,
+            'sensor_count': int(sht40_connected) + int(bme688_connected) + int(bh1750_connected) + int(sdp810_connected)
         }
     
     def close_sensors(self):
@@ -690,5 +746,6 @@ class SensorManager:
         self.sht40 = None
         self.bme688 = None
         self.bh1750 = None
+        self.sdp810 = None
         
         print("✅ 센서 연결 해제 완료")
