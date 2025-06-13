@@ -29,6 +29,9 @@ function bindEventListeners() {
     // 센서 등록 폼
     document.getElementById('register-sensor-form').addEventListener('submit', registerSensor);
     
+    // 수동 주소 입력 토글
+    document.getElementById('manual-address-input').addEventListener('change', toggleManualAddressInput);
+    
     // 센서 편집 폼
     document.getElementById('edit-sensor-form').addEventListener('submit', updateSensor);
     
@@ -370,13 +373,67 @@ function displayTestResult(testResult) {
     modalBody.innerHTML = html;
 }
 
+// 수동 주소 입력 토글
+function toggleManualAddressInput() {
+    const checkbox = document.getElementById('manual-address-input');
+    const selectElement = document.getElementById('sensor-address');
+    const manualInput = document.getElementById('manual-address');
+    
+    if (checkbox.checked) {
+        selectElement.style.display = 'none';
+        manualInput.style.display = 'block';
+        selectElement.required = false;
+        manualInput.required = true;
+    } else {
+        selectElement.style.display = 'block';
+        manualInput.style.display = 'none';
+        selectElement.required = true;
+        manualInput.required = false;
+    }
+}
+
+// 16진수 주소를 10진수로 변환
+function parseAddress(addressInput) {
+    if (addressInput.startsWith('0x') || addressInput.startsWith('0X')) {
+        return parseInt(addressInput, 16);
+    }
+    return parseInt(addressInput, 10);
+}
+
 // 센서 등록
 async function registerSensor(event) {
     event.preventDefault();
     
     const formData = new FormData(event.target);
+    const isManualInput = document.getElementById('manual-address-input').checked;
+    
+    let address;
+    if (isManualInput) {
+        const manualAddress = formData.get('manual_address');
+        if (!manualAddress) {
+            showToast('error', '주소를 입력해주세요.');
+            return;
+        }
+        try {
+            address = parseAddress(manualAddress);
+            if (address < 0x08 || address > 0x77) {
+                showToast('error', 'I2C 주소는 0x08~0x77 범위여야 합니다.');
+                return;
+            }
+        } catch (e) {
+            showToast('error', '올바른 16진수 주소를 입력해주세요. (예: 0x48)');
+            return;
+        }
+    } else {
+        address = parseInt(formData.get('address'));
+        if (!address) {
+            showToast('error', '주소를 선택해주세요.');
+            return;
+        }
+    }
+    
     const sensorData = {
-        address: parseInt(formData.get('address')),
+        address: address,
         name: formData.get('name'),
         type: formData.get('type'),
         description: formData.get('description'),
@@ -399,10 +456,15 @@ async function registerSensor(event) {
             event.target.reset();
             loadSensors();
             
-            // 등록된 주소를 선택 옵션에서 제거
+            // 폼 리셋 및 UI 정리
+            event.target.reset();
+            document.getElementById('manual-address-input').checked = false;
+            toggleManualAddressInput();
+            
+            // 등록된 주소를 선택 옵션에서 제거 (스캔된 주소만)
             const addressSelect = document.getElementById('sensor-address');
             const option = Array.from(addressSelect.options).find(opt => opt.value == sensorData.address);
-            if (option) {
+            if (option && option.style.color === 'rgb(220, 53, 69)') { // 미등록 센서 옵션만 제거
                 option.remove();
             }
         } else {

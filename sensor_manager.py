@@ -7,7 +7,10 @@ EG-Dash 실제 센서 관리자
 """
 
 import time
-import smbus2
+try:
+    import smbus2
+except ImportError:
+    smbus2 = None
 import random
 import math
 from datetime import datetime

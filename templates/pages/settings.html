@@ -115,9 +115,28 @@
                 <div class="form-row">
                     <div class="form-group">
                         <label for="sensor-address">I2C 주소</label>
-                        <select id="sensor-address" name="address" required>
-                            <option value="">주소 선택...</option>
-                        </select>
+                        <div class="address-input-container">
+                            <select id="sensor-address" name="address" required>
+                                <option value="">주소 선택...</option>
+                                <optgroup label="일반 센서 주소">
+                                    <option value="68">0x44 (SHT40)</option>
+                                    <option value="69">0x45 (SHT40)</option>
+                                    <option value="35">0x23 (BH1750)</option>
+                                    <option value="92">0x5C (BH1750)</option>
+                                    <option value="118">0x76 (BME688)</option>
+                                    <option value="119">0x77 (BME688)</option>
+                                    <option value="37">0x25 (SDP810)</option>
+                                </optgroup>
+                            </select>
+                            <div class="address-input-toggle">
+                                <input type="checkbox" id="manual-address-input" />
+                                <label for="manual-address-input">직접 입력</label>
+                            </div>
+                            <input type="text" id="manual-address" name="manual_address" 
+                                   placeholder="예: 0x48" style="display: none;" 
+                                   pattern="0x[0-9A-Fa-f]{2}" 
+                                   title="16진수 형식으로 입력하세요 (예: 0x48)">
+                        </div>
                     </div>
                     <div class="form-group">
                         <label for="sensor-name">센서명</label>

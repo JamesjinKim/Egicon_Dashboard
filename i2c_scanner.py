@@ -5,7 +5,10 @@ gui_scanner.py의 백엔드 로직을 웹 환경에 맞게 포팅
 """
 
 import time
-import smbus2
+try:
+    import smbus2
+except ImportError:
+    smbus2 = None
 import threading
 from typing import Dict, List, Optional, Callable
 from datetime import datetime
@@ -24,6 +27,12 @@ class WebI2CScanner:
         # 모킹 모드인 경우
         if self.mock_mode:
             print("🔧 모킹 모드: 가상 I2C 버스 연결")
+            self.buses = {0: 'mock_bus_0', 1: 'mock_bus_1'}
+            return [0, 1]
+        
+        if smbus2 is None:
+            print("⚠️ smbus2 모듈이 없어 모킹 모드로 전환")
+            self.mock_mode = True
             self.buses = {0: 'mock_bus_0', 1: 'mock_bus_1'}
             return [0, 1]
         
@@ -58,8 +67,8 @@ class WebI2CScanner:
         if self.mock_mode:
             print(f"🔧 모킹 모드: 버스 {bus_number} 가상 스캔")
             mock_devices = {
-                0: [0x76, 0x77],  # BME688 가상 주소
-                1: [0x23, 0x5C]   # BH1750, SHT40 가상 주소
+                0: [0x44, 0x76, 0x77],  # SHT40, BME688 가상 주소
+                1: [0x23, 0x25, 0x5C]   # BH1750, SDP810 가상 주소
             }
             devices = mock_devices.get(bus_number, [])
             
@@ -104,19 +113,31 @@ class WebI2CScanner:
             except Exception:
                 pass
             
-            # 방법 2: SHT40 특화 테스트 (0x44, 0x45 주소)
+            # 방법 2: SHT40 특화 테스트 (0x44, 0x45 주소) - 참고 코드 기반 개선
             if not device_found and addr in [0x44, 0x45]:
                 try:
-                    bus.write_byte(addr, 0x89)  # 시리얼 번호 읽기 명령
-                    time.sleep(0.001)
-                    data = bus.read_i2c_block_data(addr, 0x89, 6)
-                    devices.append(addr)
-                    device_found = True
-                    print(f"버스 {bus_number}에서 SHT40 발견 (시리얼 번호): 0x{addr:02X}")
-                except:
-                    pass
-                
-                if not device_found:
+                    # 소프트 리셋 명령으로 연결 확인
+                    if smbus2 is not None:
+                        write_msg = smbus2.i2c_msg.write(addr, [0x94])  # CMD_SOFT_RESET
+                        bus.i2c_rdwr(write_msg)
+                        time.sleep(0.01)
+                        
+                        # 측정 명령을 보내고 데이터를 읽어봄
+                        write_msg = smbus2.i2c_msg.write(addr, [0xFD])  # CMD_MEASURE_HIGH_PRECISION
+                        bus.i2c_rdwr(write_msg)
+                        time.sleep(0.02)
+                        
+                        # 데이터 읽기 시도
+                        read_msg = smbus2.i2c_msg.read(addr, 6)
+                        bus.i2c_rdwr(read_msg)
+                        
+                        devices.append(addr)
+                        device_found = True
+                        print(f"버스 {bus_number}에서 SHT40 발견 (저수준 I2C): 0x{addr:02X}")
+                    else:
+                        raise Exception("smbus2 not available")
+                except Exception as e:
+                    # 기존 방식으로 재시도
                     try:
                         bus.write_byte(addr, 0xFD)  # 고정밀 측정 명령
                         time.sleep(0.01)
@@ -288,14 +309,31 @@ class WebI2CScanner:
                     "상태": "가상 데이터"
                 }
             }
+        elif address == 0x25:  # SDP810
+            pressure = round(random.uniform(-100.0, 100.0), 2)
+            return {
+                "success": True,
+                "type": "차압센서 (SDP810) - 가상",
+                "values": {
+                    "압력": f"{pressure} Pa",
+                    "CRC": "OK",
+                    "상태": "가상 데이터"
+                }
+            }
         elif address in [0x76, 0x77]:  # BME688
+            temp = round(random.uniform(20.0, 25.0), 1)
+            humidity = round(random.uniform(40.0, 60.0), 1)
+            pressure = round(random.uniform(1000.0, 1020.0), 1)
+            gas = round(random.uniform(50000, 100000), 0)
             return {
                 "success": True,
                 "type": "환경센서 (BME688) - 가상",
                 "values": {
-                    "센서": "BME688 확인됨",
-                    "칩 ID": "0x61",
-                    "상태": "가상 연결"
+                    "온도": f"{temp}°C",
+                    "습도": f"{humidity}%RH",
+                    "압력": f"{pressure} hPa",
+                    "가스저항": f"{gas} Ω",
+                    "상태": "가상 데이터"
                 }
             }
         else:
