@@ -103,6 +103,9 @@ class SensorDatabase:
             # SHT40 온습도센서
             (0x44, "SHT40", "온습도센서", "고정밀 디지털 온습도 센서", "3.3V"),
             (0x45, "SHT40", "온습도센서", "고정밀 디지털 온습도 센서 (ALT)", "3.3V"),
+            
+            # SDP810 차압센서
+            (0x25, "SDP810", "차압센서", "차압정보를 제공해 주는 센서", "3.3V"),
         ]
         
         with self.get_connection() as conn:
