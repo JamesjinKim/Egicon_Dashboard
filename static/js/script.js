@@ -4,6 +4,56 @@ const API_URL = window.location.origin + '/api';
 // 차트 객체 저장용 변수
 const charts = {};
 
+// 센서별 차트 ID 매핑
+const SENSOR_CHARTS = {
+    sht40: {
+        temperature: 'sht40-temperature-chart',
+        humidity: 'sht40-humidity-chart'
+    },
+    bme688: {
+        temperature: 'bme688-temperature-chart',
+        humidity: 'bme688-humidity-chart',
+        pressure: 'bme688-pressure-chart',
+        airquality: 'bme688-airquality-chart'
+    },
+    sdp810: {
+        pressure: 'sdp810-pressure-chart'
+    },
+    bh1750: {
+        light: 'bh1750-light-chart'
+    },
+    virtual: {
+        vibration: 'virtual-vibration-chart'
+    }
+};
+
+// 센서별 위젯 ID 매핑
+const SENSOR_WIDGETS = {
+    sht40: {
+        temperature: 'sht40-temp-value',
+        humidity: 'sht40-humidity-value',
+        status: 'sht40-status'
+    },
+    bme688: {
+        temperature: 'bme688-temp-value',
+        humidity: 'bme688-humidity-value',
+        pressure: 'bme688-pressure-value',
+        airquality: 'bme688-airquality-value',
+        status: 'bme688-status'
+    },
+    sdp810: {
+        pressure: 'sdp810-pressure-value',
+        status: 'sdp810-status'
+    },
+    bh1750: {
+        light: 'bh1750-light-value',
+        status: 'bh1750-status'
+    },
+    virtual: {
+        vibration: 'virtual-vibration-value'
+    }
+};
+
 let updateInterval;
 let isUpdating = false;
 
@@ -47,11 +97,11 @@ async function loadSensorData() {
         
         const data = await response.json();
         
-        // 데이터 표시 업데이트
-        updateSensorDisplay(data);
+        // 센서별 데이터 업데이트
+        updateAllSensorDisplays(data);
         
         // 차트 설정
-        setupCharts(data);
+        setupAllCharts(data);
         
         // 상태 업데이트
         document.getElementById('db-status').textContent = '데이터베이스 상태: 연결됨';
@@ -80,8 +130,8 @@ async function updateSensorData() {
         
         const currentData = await currentResponse.json();
         
-        // 위젯 데이터 업데이트
-        updateWidgetValues(currentData);
+        // 센서별 위젯 데이터 업데이트
+        updateAllSensorDisplays(currentData);
         
         // 상태 업데이트
         document.getElementById('last-update').textContent = `마지막 업데이트: ${formatDateTime(currentData.timestamp)}`;
@@ -93,341 +143,246 @@ async function updateSensorData() {
     }
 }
 
-// 위젯 및 카드 데이터 표시 업데이트
-function updateSensorDisplay(data) {
-    // 위젯 업데이트
-    updateWidgetValues(data);
-}
-
-// 위젯 값 업데이트 (센서 상태 반영)
-function updateWidgetValues(data) {
+// 모든 센서 디스플레이 업데이트
+function updateAllSensorDisplays(data) {
     try {
-        // 데이터 유효성 검사 및 안전한 업데이트
         if (data && typeof data === 'object') {
-            // 온도 위젯 (센서 상태 반영)
-            const tempElement = document.getElementById('temp-value');
-            if (tempElement) {
-                const sensorConnected = data.sensor_status && (data.sensor_status.bme688 || data.sensor_status.sht40);
-                let tempValue, statusClass;
-                
-                if (data.temperature !== undefined && data.temperature !== null) {
-                    tempValue = data.temperature.toFixed(1);
-                    statusClass = 'sensor-connected';
-                } else if (sensorConnected) {
-                    tempValue = '0.0';
-                    statusClass = 'sensor-error';
-                } else {
-                    tempValue = '센서 없음';
-                    statusClass = 'sensor-disconnected';
-                }
-                
-                tempElement.innerHTML = tempValue + '<span class="widget-unit">°C</span>';
-                tempElement.className = tempElement.className.replace(/sensor-\w+/g, '') + ' ' + statusClass;
-            }
-            
-            // 습도 위젯 (센서 상태 반영)
-            const humidityElement = document.getElementById('humidity-value');
-            if (humidityElement) {
-                const sensorConnected = data.sensor_status && (data.sensor_status.bme688 || data.sensor_status.sht40);
-                let humidityValue, statusClass;
-                
-                if (data.humidity !== undefined && data.humidity !== null) {
-                    humidityValue = data.humidity.toFixed(1);
-                    statusClass = 'sensor-connected';
-                } else if (sensorConnected) {
-                    humidityValue = '0.0';
-                    statusClass = 'sensor-error';
-                } else {
-                    humidityValue = '센서 없음';
-                    statusClass = 'sensor-disconnected';
-                }
-                
-                humidityElement.innerHTML = humidityValue + '<span class="widget-unit">%</span>';
-                humidityElement.className = humidityElement.className.replace(/sensor-\w+/g, '') + ' ' + statusClass;
-            }
-            
-            // 조도 위젯 (센서 상태 반영)
-            const lightElement = document.getElementById('light-value');
-            if (lightElement) {
-                const sensorConnected = data.sensor_status && data.sensor_status.bh1750;
-                let lightValue, statusClass;
-                
-                if (data.light !== undefined && data.light !== null) {
-                    lightValue = Math.round(data.light);
-                    statusClass = 'sensor-connected';
-                } else if (sensorConnected) {
-                    lightValue = '0';
-                    statusClass = 'sensor-error';
-                } else {
-                    lightValue = '센서 없음';
-                    statusClass = 'sensor-disconnected';
-                }
-                
-                lightElement.innerHTML = lightValue + '<span class="widget-unit">lux</span>';
-                lightElement.className = lightElement.className.replace(/sensor-\w+/g, '') + ' ' + statusClass;
-            }
-            
-            // 대기압 위젯 (BME688)
-            const pressureElement = document.getElementById('pressure-value');
-            if (pressureElement) {
-                const sensorConnected = data.sensor_status && data.sensor_status.bme688;
-                let pressureValue, statusClass;
-                
-                if (data.pressure !== undefined && data.pressure !== null) {
-                    pressureValue = data.pressure.toFixed(1);
-                    statusClass = 'sensor-connected';
-                } else if (sensorConnected) {
-                    pressureValue = '0.0';
-                    statusClass = 'sensor-error';
-                } else {
-                    pressureValue = '센서 없음';
-                    statusClass = 'sensor-disconnected';
-                }
-                
-                pressureElement.innerHTML = pressureValue + '<span class="widget-unit">hPa</span>';
-                pressureElement.className = pressureElement.className.replace(/sensor-\w+/g, '') + ' ' + statusClass;
-            }
-            
-            // 차압 위젯 (SDP810)
-            const differentialPressureElement = document.getElementById('differential-pressure-value');
-            if (differentialPressureElement) {
-                const sensorConnected = data.sensor_status && data.sensor_status.sdp810;
-                let pressureValue, statusClass;
-                
-                if (data.differential_pressure !== undefined && data.differential_pressure !== null) {
-                    pressureValue = data.differential_pressure.toFixed(1);
-                    statusClass = 'sensor-connected';
-                } else if (sensorConnected) {
-                    pressureValue = '0.0';
-                    statusClass = 'sensor-error';
-                } else {
-                    pressureValue = '센서 없음';
-                    statusClass = 'sensor-disconnected';
-                }
-                
-                differentialPressureElement.innerHTML = pressureValue + '<span class="widget-unit">Pa</span>';
-                differentialPressureElement.className = differentialPressureElement.className.replace(/sensor-\w+/g, '') + ' ' + statusClass;
-            }
-            
-            // 진동 위젯 (고정값)
-            const vibrationElement = document.getElementById('vibration-value');
-            if (vibrationElement) {
-                const vibrationValue = (data.vibration !== undefined && data.vibration !== null) 
-                    ? data.vibration.toFixed(2) 
-                    : '0.00';
-                vibrationElement.innerHTML = vibrationValue + '<span class="widget-unit">g</span>';
-                vibrationElement.className = vibrationElement.className.replace(/sensor-\w+/g, '') + ' sensor-virtual';
-            }
-            
-            // 공기질 위젯 (센서 상태 반영)
-            const airqualityElement = document.getElementById('airquality-value');
-            if (airqualityElement) {
-                const sensorConnected = data.sensor_status && data.sensor_status.bme688;
-                let airqualityValue, statusClass;
-                
-                if (data.air_quality !== undefined && data.air_quality !== null) {
-                    airqualityValue = Math.round(data.air_quality);
-                    statusClass = 'sensor-connected';
-                } else if (sensorConnected) {
-                    airqualityValue = '0';
-                    statusClass = 'sensor-error';
-                } else {
-                    airqualityValue = '센서 없음';
-                    statusClass = 'sensor-disconnected';
-                }
-                
-                airqualityElement.innerHTML = airqualityValue + '<span class="widget-unit">/100</span>';
-                airqualityElement.className = airqualityElement.className.replace(/sensor-\w+/g, '') + ' ' + statusClass;
-            }
+            // 각 센서별로 업데이트
+            updateSensorSection('sht40', data);
+            updateSensorSection('bme688', data);
+            updateSensorSection('sdp810', data);
+            updateSensorSection('bh1750', data);
+            updateVirtualSensors(data);
         } else {
-            // 데이터가 없을 경우 모든 위젯을 '--'로 설정
-            setAllWidgetsToDefault();
+            // 데이터가 없을 경우 모든 센서를 비연결 상태로 설정
+            setAllSensorsDisconnected();
         }
     } catch (error) {
-        console.error('위젯 업데이트 오류:', error);
-        setAllWidgetsToDefault();
+        console.error('센서 디스플레이 업데이트 오류:', error);
+        setAllSensorsDisconnected();
     }
-    
-    // 카드 값도 안전하게 업데이트
-    updateCardValues(data);
 }
 
-// 모든 위젯을 기본값('--')으로 설정
-function setAllWidgetsToDefault() {
-    const widgetIds = ['temp-value', 'humidity-value', 'light-value', 'pressure-value', 'differential-pressure-value', 'vibration-value', 'airquality-value'];
-    const units = ['°C', '%', 'lux', 'hPa', 'Pa', 'g', '/100'];
+// 개별 센서 섹션 업데이트
+function updateSensorSection(sensorType, data) {
+    const sensorStatus = data.sensor_status && data.sensor_status[sensorType];
+    const statusElement = document.getElementById(SENSOR_WIDGETS[sensorType].status);
+    const sectionElement = document.getElementById(`${sensorType}-section`);
     
-    widgetIds.forEach((id, index) => {
-        const element = document.getElementById(id);
-        if (element) {
-            element.innerHTML = '--<span class="widget-unit">' + units[index] + '</span>';
+    if (sensorStatus) {
+        // 센서 연결됨
+        if (statusElement) {
+            statusElement.textContent = '연결됨';
+            statusElement.className = 'sensor-status-indicator connected';
         }
+        if (sectionElement) {
+            sectionElement.classList.remove('hidden');
+        }
+        
+        // 센서별 데이터 업데이트
+        switch (sensorType) {
+            case 'sht40':
+                updateSensorWidget('sht40', 'temperature', data.temperature, '°C');
+                updateSensorWidget('sht40', 'humidity', data.humidity, '%');
+                break;
+            case 'bme688':
+                updateSensorWidget('bme688', 'temperature', data.temperature, '°C');
+                updateSensorWidget('bme688', 'humidity', data.humidity, '%');
+                updateSensorWidget('bme688', 'pressure', data.pressure, 'hPa');
+                updateSensorWidget('bme688', 'airquality', data.air_quality, '/100');
+                break;
+            case 'sdp810':
+                updateSensorWidget('sdp810', 'pressure', data.differential_pressure, 'Pa');
+                break;
+            case 'bh1750':
+                updateSensorWidget('bh1750', 'light', data.light, 'lux');
+                break;
+        }
+    } else {
+        // 센서 연결 안됨
+        if (statusElement) {
+            statusElement.textContent = '연결 안됨';
+            statusElement.className = 'sensor-status-indicator disconnected';
+        }
+        // 섹션을 숨기지 않고 "센서 없음" 상태로 표시
+        setDefaultSensorValues(sensorType);
+    }
+}
+
+// 개별 센서 위젯 업데이트
+function updateSensorWidget(sensorType, dataType, value, unit) {
+    const widgetId = SENSOR_WIDGETS[sensorType][dataType];
+    const element = document.getElementById(widgetId);
+    
+    if (element) {
+        let displayValue, statusClass;
+        
+        if (value !== undefined && value !== null) {
+            if (dataType === 'light' || dataType === 'airquality') {
+                displayValue = Math.round(value);
+            } else {
+                displayValue = value.toFixed(1);
+            }
+            statusClass = 'sensor-connected';
+        } else {
+            displayValue = '센서 없음';
+            statusClass = 'sensor-disconnected';
+        }
+        
+        element.innerHTML = displayValue + '<span class="widget-unit">' + unit + '</span>';
+        element.className = element.className.replace(/sensor-\w+/g, '') + ' ' + statusClass;
+    }
+}
+
+// 가상 센서 업데이트
+function updateVirtualSensors(data) {
+    const vibrationElement = document.getElementById(SENSOR_WIDGETS.virtual.vibration);
+    if (vibrationElement) {
+        const vibrationValue = (data.vibration !== undefined && data.vibration !== null) 
+            ? data.vibration.toFixed(2) 
+            : '0.00';
+        vibrationElement.innerHTML = vibrationValue + '<span class="widget-unit">g</span>';
+        vibrationElement.className = vibrationElement.className.replace(/sensor-\w+/g, '') + ' sensor-virtual';
+    }
+}
+
+// 기본값으로 센서 설정
+function setDefaultSensorValues(sensorType) {
+    const widgets = SENSOR_WIDGETS[sensorType];
+    const units = {
+        temperature: '°C',
+        humidity: '%',
+        pressure: sensorType === 'sdp810' ? 'Pa' : 'hPa',
+        airquality: '/100',
+        light: 'lux'
+    };
+    
+    for (const [dataType, widgetId] of Object.entries(widgets)) {
+        if (dataType !== 'status') {
+            const element = document.getElementById(widgetId);
+            if (element) {
+                element.innerHTML = '센서 없음<span class="widget-unit">' + units[dataType] + '</span>';
+                element.className = element.className.replace(/sensor-\w+/g, '') + ' sensor-disconnected';
+            }
+        }
+    }
+}
+
+// 모든 센서를 비연결 상태로 설정
+function setAllSensorsDisconnected() {
+    ['sht40', 'bme688', 'sdp810', 'bh1750'].forEach(sensorType => {
+        const statusElement = document.getElementById(SENSOR_WIDGETS[sensorType].status);
+        if (statusElement) {
+            statusElement.textContent = '연결 안됨';
+            statusElement.className = 'sensor-status-indicator disconnected';
+        }
+        setDefaultSensorValues(sensorType);
     });
 }
 
-// 카드 값 업데이트 (안전한 처리)
-function updateCardValues(data) {
-    if (!data || typeof data !== 'object') return;
-    
-    try {
-        // 온도 카드
-        const tempCardElement = document.getElementById('temp-card-value');
-        if (tempCardElement) {
-            const tempValue = (data.temperature !== undefined && data.temperature !== null) 
-                ? data.temperature.toFixed(1) 
-                : '--';
-            tempCardElement.innerHTML = tempValue + '<span class="sensor-unit">°C</span>';
-        }
-        
-        // 습도 카드
-        const humidityCardElement = document.getElementById('humidity-card-value');
-        if (humidityCardElement) {
-            const humidityValue = (data.humidity !== undefined && data.humidity !== null) 
-                ? data.humidity.toFixed(1) 
-                : '--';
-            humidityCardElement.innerHTML = humidityValue + '<span class="sensor-unit">%</span>';
-        }
-        
-        // 조도 카드
-        const lightCardElement = document.getElementById('light-card-value');
-        if (lightCardElement) {
-            const lightValue = (data.light !== undefined && data.light !== null) 
-                ? Math.round(data.light) 
-                : '--';
-            lightCardElement.innerHTML = lightValue + '<span class="sensor-unit">lux</span>';
-        }
-        
-        // 대기압 카드 (BME688)
-        const pressureCardElement = document.getElementById('pressure-card-value');
-        if (pressureCardElement) {
-            const pressureValue = (data.pressure !== undefined && data.pressure !== null) 
-                ? data.pressure.toFixed(1) 
-                : '--';
-            pressureCardElement.innerHTML = pressureValue + '<span class="sensor-unit">hPa</span>';
-        }
-        
-        // 차압 카드 (SDP810)
-        const differentialPressureCardElement = document.getElementById('differential-pressure-card-value');
-        if (differentialPressureCardElement) {
-            const pressureValue = (data.differential_pressure !== undefined && data.differential_pressure !== null) 
-                ? data.differential_pressure.toFixed(1) 
-                : '--';
-            differentialPressureCardElement.innerHTML = pressureValue + '<span class="sensor-unit">Pa</span>';
-        }
-        
-        // 진동 카드
-        const vibrationCardElement = document.getElementById('vibration-card-value');
-        if (vibrationCardElement) {
-            const vibrationValue = (data.vibration !== undefined && data.vibration !== null) 
-                ? data.vibration.toFixed(2) 
-                : '--';
-            vibrationCardElement.innerHTML = vibrationValue + '<span class="sensor-unit">g</span>';
-        }
-        
-        // 공기질 카드
-        const airqualityCardElement = document.getElementById('airquality-card-value');
-        if (airqualityCardElement) {
-            const airqualityValue = (data.air_quality !== undefined && data.air_quality !== null) 
-                ? Math.round(data.air_quality) 
-                : '--';
-            airqualityCardElement.innerHTML = airqualityValue + '<span class="sensor-unit">/100</span>';
-        }
-    } catch (error) {
-        console.error('카드 값 업데이트 오류:', error);
-    }
-}
-
-// 차트 설정
-function setupCharts(data) {
+// 모든 차트 설정
+function setupAllCharts(data) {
     // 더미 히스토리 데이터 생성 (최근 24시간)
     const timeLabels = generateTimeLabels(24);
     const dummyHistory = generateDummyHistory(24, data);
     
-    // 차트 설정값
-    const chartConfigs = {
-        temperature: {
-            id: 'temperatureChart',
-            label: '온도 (°C)',
-            color: '#FF6384',
-            data: dummyHistory.temperature,
-            type: 'line'
-        },
-        humidity: {
-            id: 'humidityChart',
-            label: '습도 (%)',
-            color: '#36A2EB',
-            data: dummyHistory.humidity,
-            type: 'line'
-        },
-        light: {
-            id: 'lightChart',
-            label: '조도 (lux)',
-            color: '#FFCE56',
-            data: dummyHistory.light,
-            type: 'bar'
-        },
-        pressure: {
-            id: 'pressureChart',
-            label: '대기압 (hPa)',
-            color: '#8e44ad',
-            data: dummyHistory.pressure,
-            type: 'line'
-        },
-        differentialPressure: {
-            id: 'differentialPressureChart',
-            label: '차압 (Pa)',
-            color: '#4BC0C0',
-            data: dummyHistory.differential_pressure,
-            type: 'line'
-        },
-        vibration: {
-            id: 'vibrationChart',
-            label: '진동 (g)',
-            color: '#9966FF',
-            data: dummyHistory.vibration,
-            type: 'bar'
-        },
-        airquality: {
-            id: 'airqualityChart',
-            label: '공기질 (/100)',
-            color: '#00d084',
-            data: dummyHistory.airquality,
-            type: 'line'
-        }
-    };
+    // 각 센서별 차트 생성
+    setupSensorCharts('sht40', ['temperature', 'humidity'], timeLabels, dummyHistory, data);
+    setupSensorCharts('bme688', ['temperature', 'humidity', 'pressure', 'airquality'], timeLabels, dummyHistory, data);
+    setupSensorCharts('sdp810', ['pressure'], timeLabels, dummyHistory, data);
+    setupSensorCharts('bh1750', ['light'], timeLabels, dummyHistory, data);
+    setupSensorCharts('virtual', ['vibration'], timeLabels, dummyHistory, data);
+    
+    // 통합 차트 설정
+    setupCombinedChart(timeLabels, dummyHistory);
+}
 
-    // 개별 차트 생성
-    for (const [sensor, config] of Object.entries(chartConfigs)) {
-        const ctx = document.getElementById(config.id);
+// 센서별 차트 설정
+function setupSensorCharts(sensorType, dataTypes, timeLabels, dummyHistory, currentData) {
+    dataTypes.forEach(dataType => {
+        const chartId = SENSOR_CHARTS[sensorType][dataType];
+        const ctx = document.getElementById(chartId);
+        
         if (ctx) {
             // 이미 존재하는 차트 파괴
-            if (charts[sensor]) {
-                charts[sensor].destroy();
+            if (charts[chartId]) {
+                charts[chartId].destroy();
             }
             
-            // 각 센서별 독립 차트 생성
-            charts[sensor] = new Chart(ctx.getContext('2d'), {
-                type: config.type,
-                data: {
-                    labels: timeLabels,
-                    datasets: [{
-                        label: config.label,
-                        data: config.data,
-                        borderColor: config.color,
-                        backgroundColor: config.type === 'bar' 
-                            ? config.color + 'B3'  // 70% opacity
-                            : config.color + '1A', // 10% opacity
-                        tension: 0.4,
-                        fill: config.type !== 'bar'
-                    }]
-                },
-                options: getChartOptions(config.label)
-            });
+            const config = getChartConfig(sensorType, dataType, timeLabels, dummyHistory);
+            charts[chartId] = new Chart(ctx.getContext('2d'), config);
         }
-    }
+    });
+}
+
+// 차트 설정 가져오기
+function getChartConfig(sensorType, dataType, timeLabels, dummyHistory) {
+    const colors = {
+        sht40: { temperature: '#ff6b6b', humidity: '#4ecdc4' },
+        bme688: { temperature: '#ff9f43', humidity: '#54a0ff', pressure: '#5f27cd', airquality: '#00d2d3' },
+        sdp810: { pressure: '#ff3838' },
+        bh1750: { light: '#ffb142' },
+        virtual: { vibration: '#8c7ae6' }
+    };
     
-    // 통합 차트 생성
-    const combinedCtx = document.getElementById('combinedChart');
+    const units = {
+        temperature: '°C',
+        humidity: '%',
+        pressure: sensorType === 'sdp810' ? 'Pa' : 'hPa',
+        airquality: '/100',
+        light: 'lux',
+        vibration: 'g'
+    };
+    
+    const labels = {
+        temperature: '온도',
+        humidity: '습도',
+        pressure: sensorType === 'sdp810' ? '차압' : '절대압력',
+        airquality: '공기질',
+        light: '조도',
+        vibration: '진동'
+    };
+    
+    const dataKey = dataType === 'pressure' && sensorType === 'sdp810' ? 'differential_pressure' : dataType;
+    const data = dummyHistory[dataKey] || Array(24).fill(0);
+    const color = colors[sensorType][dataType];
+    const chartType = (dataType === 'light' || dataType === 'vibration') ? 'bar' : 'line';
+    
+    return {
+        type: chartType,
+        data: {
+            labels: timeLabels,
+            datasets: [{
+                label: `${labels[dataType]} (${units[dataType]})`,
+                data: data,
+                borderColor: color,
+                backgroundColor: chartType === 'bar' ? color + 'B3' : color + '1A',
+                tension: 0.4,
+                fill: chartType !== 'bar'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                title: {
+                    display: true,
+                    text: `${sensorType.toUpperCase()} ${labels[dataType]}`,
+                    font: { size: 12 }
+                }
+            },
+            scales: {
+                x: { display: false },
+                y: { beginAtZero: false }
+            }
+        }
+    };
+}
+
+// 통합 차트 설정
+function setupCombinedChart(timeLabels, dummyHistory) {
+    const combinedCtx = document.getElementById('combined-chart');
     if (combinedCtx) {
         // 이미 존재하는 차트 파괴
         if (charts.combined) {
@@ -440,78 +395,56 @@ function setupCharts(data) {
                 labels: timeLabels,
                 datasets: [
                     {
-                        label: '온도 (°C)',
-                        data: dummyHistory.temperature,
-                        borderColor: '#FF6384',
+                        label: 'SHT40 온도 (°C)',
+                        data: dummyHistory.temperature || [],
+                        borderColor: '#ff6b6b',
                         backgroundColor: 'transparent',
                         borderWidth: 2,
-                        tension: 0.4,
-                        yAxisID: 'y1'
+                        tension: 0.4
                     },
                     {
-                        label: '습도 (%)',
-                        data: dummyHistory.humidity,
-                        borderColor: '#36A2EB',
+                        label: 'SHT40 습도 (%)',
+                        data: dummyHistory.humidity || [],
+                        borderColor: '#4ecdc4',
                         backgroundColor: 'transparent',
                         borderWidth: 2,
-                        tension: 0.4,
-                        yAxisID: 'y1'
+                        tension: 0.4
                     },
                     {
-                        label: '조도 (lux/10)',
-                        data: dummyHistory.light.map(v => v/10),
-                        borderColor: '#FFCE56',
+                        label: 'SDP810 차압 (Pa)',
+                        data: dummyHistory.differential_pressure || [],
+                        borderColor: '#ff3838',
                         backgroundColor: 'transparent',
                         borderWidth: 2,
-                        tension: 0.4,
-                        yAxisID: 'y1'
+                        tension: 0.4
                     },
                     {
-                        label: '차압 (Pa)',
-                        data: dummyHistory.pressure,
-                        borderColor: '#4BC0C0',
+                        label: 'BH1750 조도 (lux/10)',
+                        data: (dummyHistory.light || []).map(v => v/10),
+                        borderColor: '#ffb142',
                         backgroundColor: 'transparent',
                         borderWidth: 2,
-                        tension: 0.4,
-                        yAxisID: 'y1'
-                    },
-                    {
-                        label: '진동 (g*100)',
-                        data: dummyHistory.vibration.map(v => v*100),
-                        borderColor: '#9966FF',
-                        backgroundColor: 'transparent',
-                        borderWidth: 2,
-                        tension: 0.4,
-                        yAxisID: 'y1'
+                        tension: 0.4
                     }
                 ]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                scales: {
-                    x: {
-                        grid: { display: false }
-                    },
-                    y1: {
-                        type: 'linear',
-                        position: 'left',
-                        title: {
-                            display: true,
-                            text: '측정값'
-                        },
-                        grid: {
-                            borderDash: [2, 2]
-                        }
-                    }
-                },
                 plugins: {
-                    legend: {
-                        position: 'top'
-                    },
+                    legend: { position: 'top' },
                     title: {
                         display: true,
                         text: '통합 센서 데이터'
+                    }
+                },
+                scales: {
+                    x: { grid: { display: false } },
+                    y: {
+                        title: {
+                            display: true,
+                            text: '측정값'
+                        }
                     }
                 }
             }
@@ -521,28 +454,25 @@ function setupCharts(data) {
 
 // 더미 차트 설정 (오류 발생 시)
 function setupDummyCharts() {
-    // 시간 레이블
     const timeLabels = generateTimeLabels(24);
-    
-    // 더미 데이터
     const dummyData = {
         temperature: Array.from({length: 24}, () => Math.random() * 8 + 20),
         humidity: Array.from({length: 24}, () => Math.random() * 35 + 40),
         light: Array.from({length: 24}, () => Math.random() * 1000 + 500),
-        pressure: Array.from({length: 24}, () => Math.random() * 50 + 1000),  // 1000-1050 hPa
-        differential_pressure: Array.from({length: 24}, () => Math.random() * 100 - 50),  // ±50 Pa
+        pressure: Array.from({length: 24}, () => Math.random() * 50 + 1000),
+        differential_pressure: Array.from({length: 24}, () => Math.random() * 100 - 50),
         vibration: Array.from({length: 24}, () => Math.random() * 0.49 + 0.01),
-        airquality: Array.from({length: 24}, () => Math.random() * 40 + 30)
+        air_quality: Array.from({length: 24}, () => Math.random() * 40 + 30)
     };
     
-    setupCharts({
+    setupAllCharts({
         temperature: dummyData.temperature[23],
         humidity: dummyData.humidity[23],
         light: dummyData.light[23],
         pressure: dummyData.pressure[23],
         differential_pressure: dummyData.differential_pressure[23],
         vibration: dummyData.vibration[23],
-        air_quality: dummyData.airquality[23]
+        air_quality: dummyData.air_quality[23]
     });
 }
 
@@ -555,17 +485,27 @@ function generateDummyHistory(hours, currentData) {
         pressure: [],
         differential_pressure: [],
         vibration: [],
-        airquality: []
+        air_quality: []
+    };
+    
+    const defaultValues = {
+        temperature: 22.0,
+        humidity: 50.0,
+        light: 300,
+        pressure: 1013.0,
+        differential_pressure: 0.0,
+        vibration: 0.01,
+        air_quality: 50
     };
     
     for (let i = 0; i < hours; i++) {
-        data.temperature.push(currentData.temperature + (Math.random() - 0.5) * 4);
-        data.humidity.push(currentData.humidity + (Math.random() - 0.5) * 10);
-        data.light.push(currentData.light + (Math.random() - 0.5) * 200);
-        data.pressure.push(currentData.pressure + (Math.random() - 0.5) * 50);  // hPa 범위
-        data.differential_pressure.push(currentData.differential_pressure + (Math.random() - 0.5) * 20);  // Pa 범위
-        data.vibration.push(currentData.vibration + (Math.random() - 0.5) * 0.1);
-        data.airquality.push(currentData.air_quality + (Math.random() - 0.5) * 10);
+        data.temperature.push((currentData.temperature || defaultValues.temperature) + (Math.random() - 0.5) * 4);
+        data.humidity.push((currentData.humidity || defaultValues.humidity) + (Math.random() - 0.5) * 10);
+        data.light.push((currentData.light || defaultValues.light) + (Math.random() - 0.5) * 200);
+        data.pressure.push((currentData.pressure || defaultValues.pressure) + (Math.random() - 0.5) * 50);
+        data.differential_pressure.push((currentData.differential_pressure || defaultValues.differential_pressure) + (Math.random() - 0.5) * 20);
+        data.vibration.push((currentData.vibration || defaultValues.vibration) + (Math.random() - 0.5) * 0.1);
+        data.air_quality.push((currentData.air_quality || defaultValues.air_quality) + (Math.random() - 0.5) * 10);
     }
     
     return data;
@@ -583,34 +523,6 @@ function generateTimeLabels(hours) {
     }
     
     return labels;
-}
-
-// 차트 옵션 가져오기 함수
-function getChartOptions(title) {
-    return {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-            legend: {
-                display: false
-            },
-            title: {
-                display: true,
-                text: title,
-                font: {
-                    size: 12
-                }
-            }
-        },
-        scales: {
-            x: {
-                display: false
-            },
-            y: {
-                beginAtZero: false
-            }
-        }
-    };
 }
 
 // 로딩 표시

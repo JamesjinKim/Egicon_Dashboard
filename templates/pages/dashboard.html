@@ -3,204 +3,229 @@
 {% block title %}메인 대시보드 - 센서 대시보드{% endblock %}
 
 {% block content %}
-    <!-- 센서 위젯 섹션 -->
-    <div class="sensor-widgets-container">
-        <!-- 온도 센서 위젯 -->
-        <div class="sensor-widget temperature">
-            <div class="widget-color-bar"></div>
-            <div class="widget-content">
-                <div class="widget-icon">
-                    <i class="fas fa-thermometer-half"></i>
+    <!-- 센서별 독립 위젯 섹션 -->
+    <div class="sensor-dashboard-container">
+        
+        <!-- SHT40 온습도 센서 섹션 -->
+        <div class="sensor-section" id="sht40-section">
+            <div class="sensor-section-header">
+                <h3><i class="fas fa-thermometer-half"></i> SHT40 온습도 센서</h3>
+                <div class="sensor-status-indicator" id="sht40-status">연결 대기중</div>
+            </div>
+            <div class="sensor-widgets-row">
+                <div class="sensor-widget sht40-temperature">
+                    <div class="widget-color-bar"></div>
+                    <div class="widget-content">
+                        <div class="widget-icon">
+                            <i class="fas fa-thermometer-half"></i>
+                        </div>
+                        <div class="widget-title">SHT40 온도</div>
+                        <div class="widget-value" id="sht40-temp-value">--<span class="widget-unit">°C</span></div>
+                    </div>
                 </div>
-                <div class="widget-title">TEMPERATURE</div>
-                <div class="widget-value" id="temp-value">--<span class="widget-unit">°C</span></div>
+                <div class="sensor-widget sht40-humidity">
+                    <div class="widget-color-bar"></div>
+                    <div class="widget-content">
+                        <div class="widget-icon">
+                            <i class="fas fa-tint"></i>
+                        </div>
+                        <div class="widget-title">SHT40 습도</div>
+                        <div class="widget-value" id="sht40-humidity-value">--<span class="widget-unit">%</span></div>
+                    </div>
+                </div>
+            </div>
+            <div class="sensor-charts-row">
+                <div class="chart-card">
+                    <div class="chart-header">SHT40 온도</div>
+                    <div class="chart-container">
+                        <canvas id="sht40-temperature-chart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-header">SHT40 습도</div>
+                    <div class="chart-container">
+                        <canvas id="sht40-humidity-chart"></canvas>
+                    </div>
+                </div>
             </div>
         </div>
 
-        <!-- 습도 센서 위젯 -->
-        <div class="sensor-widget humidity">
-            <div class="widget-color-bar"></div>
-            <div class="widget-content">
-                <div class="widget-icon">
-                    <i class="fas fa-tint"></i>
+        <!-- BME688 환경센서 섹션 -->
+        <div class="sensor-section" id="bme688-section">
+            <div class="sensor-section-header">
+                <h3><i class="fas fa-cloud"></i> BME688 환경센서</h3>
+                <div class="sensor-status-indicator" id="bme688-status">연결 대기중</div>
+            </div>
+            <div class="sensor-widgets-row">
+                <div class="sensor-widget bme688-temperature">
+                    <div class="widget-color-bar"></div>
+                    <div class="widget-content">
+                        <div class="widget-icon">
+                            <i class="fas fa-thermometer-half"></i>
+                        </div>
+                        <div class="widget-title">BME688 온도</div>
+                        <div class="widget-value" id="bme688-temp-value">--<span class="widget-unit">°C</span></div>
+                    </div>
                 </div>
-                <div class="widget-title">HUMIDITY</div>
-                <div class="widget-value" id="humidity-value">--<span class="widget-unit">%</span></div>
+                <div class="sensor-widget bme688-humidity">
+                    <div class="widget-color-bar"></div>
+                    <div class="widget-content">
+                        <div class="widget-icon">
+                            <i class="fas fa-tint"></i>
+                        </div>
+                        <div class="widget-title">BME688 습도</div>
+                        <div class="widget-value" id="bme688-humidity-value">--<span class="widget-unit">%</span></div>
+                    </div>
+                </div>
+                <div class="sensor-widget bme688-pressure">
+                    <div class="widget-color-bar"></div>
+                    <div class="widget-content">
+                        <div class="widget-icon">
+                            <i class="fas fa-tachometer-alt"></i>
+                        </div>
+                        <div class="widget-title">BME688 절대압력</div>
+                        <div class="widget-value" id="bme688-pressure-value">--<span class="widget-unit">hPa</span></div>
+                    </div>
+                </div>
+                <div class="sensor-widget bme688-airquality">
+                    <div class="widget-color-bar"></div>
+                    <div class="widget-content">
+                        <div class="widget-icon">
+                            <i class="fas fa-leaf"></i>
+                        </div>
+                        <div class="widget-title">BME688 공기질</div>
+                        <div class="widget-value" id="bme688-airquality-value">--<span class="widget-unit">/100</span></div>
+                    </div>
+                </div>
+            </div>
+            <div class="sensor-charts-row">
+                <div class="chart-card">
+                    <div class="chart-header">BME688 온도</div>
+                    <div class="chart-container">
+                        <canvas id="bme688-temperature-chart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-header">BME688 습도</div>
+                    <div class="chart-container">
+                        <canvas id="bme688-humidity-chart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-header">BME688 절대압력</div>
+                    <div class="chart-container">
+                        <canvas id="bme688-pressure-chart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-header">BME688 공기질</div>
+                    <div class="chart-container">
+                        <canvas id="bme688-airquality-chart"></canvas>
+                    </div>
+                </div>
             </div>
         </div>
 
-        <!-- 조도 센서 위젯 -->
-        <div class="sensor-widget light">
-            <div class="widget-color-bar"></div>
-            <div class="widget-content">
-                <div class="widget-icon">
-                    <i class="fas fa-sun"></i>
+        <!-- SDP810 차압센서 섹션 -->
+        <div class="sensor-section" id="sdp810-section">
+            <div class="sensor-section-header">
+                <h3><i class="fas fa-compress-alt"></i> SDP810 차압센서</h3>
+                <div class="sensor-status-indicator" id="sdp810-status">연결 대기중</div>
+            </div>
+            <div class="sensor-widgets-row">
+                <div class="sensor-widget sdp810-pressure">
+                    <div class="widget-color-bar"></div>
+                    <div class="widget-content">
+                        <div class="widget-icon">
+                            <i class="fas fa-compress-alt"></i>
+                        </div>
+                        <div class="widget-title">SDP810 차압</div>
+                        <div class="widget-value" id="sdp810-pressure-value">--<span class="widget-unit">Pa</span></div>
+                    </div>
                 </div>
-                <div class="widget-title">LIGHT</div>
-                <div class="widget-value" id="light-value">--<span class="widget-unit">lux</span></div>
+            </div>
+            <div class="sensor-charts-row">
+                <div class="chart-card">
+                    <div class="chart-header">SDP810 차압</div>
+                    <div class="chart-container">
+                        <canvas id="sdp810-pressure-chart"></canvas>
+                    </div>
+                </div>
             </div>
         </div>
 
-        <!-- 차압 센서 위젯 (SDP810) -->
-        <div class="sensor-widget pressure">
-            <div class="widget-color-bar"></div>
-            <div class="widget-content">
-                <div class="widget-icon">
-                    <i class="fas fa-compress-alt"></i>
+        <!-- BH1750 조도센서 섹션 -->
+        <div class="sensor-section" id="bh1750-section">
+            <div class="sensor-section-header">
+                <h3><i class="fas fa-sun"></i> BH1750 조도센서</h3>
+                <div class="sensor-status-indicator" id="bh1750-status">연결 대기중</div>
+            </div>
+            <div class="sensor-widgets-row">
+                <div class="sensor-widget bh1750-light">
+                    <div class="widget-color-bar"></div>
+                    <div class="widget-content">
+                        <div class="widget-icon">
+                            <i class="fas fa-sun"></i>
+                        </div>
+                        <div class="widget-title">BH1750 조도</div>
+                        <div class="widget-value" id="bh1750-light-value">--<span class="widget-unit">lux</span></div>
+                    </div>
                 </div>
-                <div class="widget-title">DIFF PRESSURE</div>
-                <div class="widget-value" id="differential-pressure-value">--<span class="widget-unit">Pa</span></div>
+            </div>
+            <div class="sensor-charts-row">
+                <div class="chart-card">
+                    <div class="chart-header">BH1750 조도</div>
+                    <div class="chart-container">
+                        <canvas id="bh1750-light-chart"></canvas>
+                    </div>
+                </div>
             </div>
         </div>
 
-        <!-- 대기압 센서 위젯 (BME688) -->
-        <div class="sensor-widget atmospheric-pressure">
-            <div class="widget-color-bar"></div>
-            <div class="widget-content">
-                <div class="widget-icon">
-                    <i class="fas fa-thermometer-half"></i>
+        <!-- 기타 센서 섹션 (진동 - 가상센서) -->
+        <div class="sensor-section" id="virtual-section">
+            <div class="sensor-section-header">
+                <h3><i class="fas fa-wave-square"></i> 가상 센서</h3>
+                <div class="sensor-status-indicator virtual">가상</div>
+            </div>
+            <div class="sensor-widgets-row">
+                <div class="sensor-widget virtual-vibration">
+                    <div class="widget-color-bar"></div>
+                    <div class="widget-content">
+                        <div class="widget-icon">
+                            <i class="fas fa-wave-square"></i>
+                        </div>
+                        <div class="widget-title">진동 (가상)</div>
+                        <div class="widget-value" id="virtual-vibration-value">0.00<span class="widget-unit">g</span></div>
+                    </div>
                 </div>
-                <div class="widget-title">ATMOSPHERIC</div>
-                <div class="widget-value" id="pressure-value">--<span class="widget-unit">hPa</span></div>
+            </div>
+            <div class="sensor-charts-row">
+                <div class="chart-card">
+                    <div class="chart-header">진동</div>
+                    <div class="chart-container">
+                        <canvas id="virtual-vibration-chart"></canvas>
+                    </div>
+                </div>
             </div>
         </div>
 
-        <!-- 진동 센서 위젯 -->
-        <div class="sensor-widget vibration">
-            <div class="widget-color-bar"></div>
-            <div class="widget-content">
-                <div class="widget-icon">
-                    <i class="fas fa-wave-square"></i>
+        <!-- 통합 차트 섹션 -->
+        <div class="sensor-section combined-section">
+            <div class="sensor-section-header">
+                <h3><i class="fas fa-chart-line"></i> 통합 센서 데이터</h3>
+                <div class="sensor-status-indicator active">활성</div>
+            </div>
+            <div class="combined-chart-container">
+                <div class="chart-card large-chart">
+                    <div class="chart-header">모든 센서 데이터 통합</div>
+                    <div class="chart-container" style="height: 300px;">
+                        <canvas id="combined-chart"></canvas>
+                    </div>
                 </div>
-                <div class="widget-title">VIBRATION</div>
-                <div class="widget-value" id="vibration-value">--<span class="widget-unit">g</span></div>
             </div>
         </div>
 
-        <!-- 공기질 센서 위젯 -->
-        <div class="sensor-widget airquality">
-            <div class="widget-color-bar"></div>
-            <div class="widget-content">
-                <div class="widget-icon">
-                    <i class="fas fa-leaf"></i>
-                </div>
-                <div class="widget-title">AIR QUALITY</div>
-                <div class="widget-value" id="airquality-value">--<span class="widget-unit">/100</span></div>
-            </div>
-        </div>
-    </div>
-
-    <div class="dashboard-container">
-        <!-- 온도 센서 카드 -->
-        <div class="card">
-            <div class="card-header">
-                <div class="card-title">온도 센서</div>
-                <div class="card-icon">
-                    <i class="fas fa-thermometer-half"></i>
-                </div>
-            </div>
-            <div class="sensor-value" id="temp-card-value">--<span class="sensor-unit">°C</span></div>
-            <div class="chart-container">
-                <canvas id="temperatureChart"></canvas>
-            </div>
-        </div>
-
-        <!-- 습도 센서 카드 -->
-        <div class="card">
-            <div class="card-header">
-                <div class="card-title">습도 센서</div>
-                <div class="card-icon">
-                    <i class="fas fa-tint"></i>
-                </div>
-            </div>
-            <div class="sensor-value" id="humidity-card-value">--<span class="sensor-unit">%</span></div>
-            <div class="chart-container">
-                <canvas id="humidityChart"></canvas>
-            </div>
-        </div>
-
-        <!-- 조도 센서 카드 -->
-        <div class="card">
-            <div class="card-header">
-                <div class="card-title">조도 센서</div>
-                <div class="card-icon">
-                    <i class="fas fa-sun"></i>
-                </div>
-            </div>
-            <div class="sensor-value" id="light-card-value">--<span class="sensor-unit">lux</span></div>
-            <div class="chart-container">
-                <canvas id="lightChart"></canvas>
-            </div>
-        </div>
-
-        <!-- 차압 센서 카드 (SDP810) -->
-        <div class="card">
-            <div class="card-header">
-                <div class="card-title">차압 센서 (SDP810)</div>
-                <div class="card-icon">
-                    <i class="fas fa-compress-alt"></i>
-                </div>
-            </div>
-            <div class="sensor-value" id="differential-pressure-card-value">--<span class="sensor-unit">Pa</span></div>
-            <div class="chart-container">
-                <canvas id="differentialPressureChart"></canvas>
-            </div>
-        </div>
-
-        <!-- 대기압 센서 카드 (BME688) -->
-        <div class="card">
-            <div class="card-header">
-                <div class="card-title">대기압 센서 (BME688)</div>
-                <div class="card-icon">
-                    <i class="fas fa-thermometer-half"></i>
-                </div>
-            </div>
-            <div class="sensor-value" id="pressure-card-value">--<span class="sensor-unit">hPa</span></div>
-            <div class="chart-container">
-                <canvas id="pressureChart"></canvas>
-            </div>
-        </div>
-
-        <!-- 진동 센서 카드 -->
-        <div class="card">
-            <div class="card-header">
-                <div class="card-title">진동 센서</div>
-                <div class="card-icon">
-                    <i class="fas fa-wave-square"></i>
-                </div>
-            </div>
-            <div class="sensor-value" id="vibration-card-value">--<span class="sensor-unit">g</span></div>
-            <div class="chart-container">
-                <canvas id="vibrationChart"></canvas>
-            </div>
-        </div>
-
-        <!-- 공기질 센서 카드 -->
-        <div class="card">
-            <div class="card-header">
-                <div class="card-title">공기질 센서</div>
-                <div class="card-icon">
-                    <i class="fas fa-leaf"></i>
-                </div>
-            </div>
-            <div class="sensor-value" id="airquality-card-value">--<span class="sensor-unit">/100</span></div>
-            <div class="chart-container">
-                <canvas id="airqualityChart"></canvas>
-            </div>
-        </div>
-
-        <!-- 대형 차트 (모든 센서 통합) -->
-        <div class="card large-chart">
-            <div class="card-header">
-                <div class="card-title">통합 센서 데이터</div>
-                <div class="card-icon">
-                    <i class="fas fa-chart-line"></i>
-                </div>
-            </div>
-            <div class="chart-container" style="height: 300px;">
-                <canvas id="combinedChart"></canvas>
-            </div>
-        </div>
     </div>
 {% endblock %}
 
