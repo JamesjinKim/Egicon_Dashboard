@@ -362,6 +362,8 @@ class SensorManager:
         self.bh1750 = None
         self.sht40 = None
         self.buses = {}
+        self.last_sensor_config = {}  # 마지막 센서 구성 저장
+        self.sensor_error_count = {}  # 센서별 오류 카운트
         
         print("🚀 센서 관리자 초기화 (라즈베리파이 전용)")
     
@@ -404,6 +406,9 @@ class SensorManager:
         
         total_sensors = 3
         print(f"📊 센서 초기화 완료: {success_count}/{total_sensors}개 센서 연결")
+        
+        # 현재 센서 구성 저장
+        self._update_sensor_config()
         
         return success_count > 0  # 하나라도 연결되면 성공
     
@@ -452,6 +457,74 @@ class SensorManager:
         print("❌ BH1750 센서를 찾을 수 없습니다")
         return None
     
+    def _update_sensor_config(self):
+        """현재 센서 구성 저장"""
+        self.last_sensor_config = {
+            'sht40': self.sht40 is not None and self.sht40.connected,
+            'bme688': self.bme688 is not None and self.bme688.connected,
+            'bh1750': self.bh1750 is not None and self.bh1750.connected
+        }
+        print(f"🔧 센서 구성 업데이트: {self.last_sensor_config}")
+    
+    def _handle_sensor_error(self, sensor_name):
+        """센서 오류 처리 및 재검색 트리거"""
+        if sensor_name not in self.sensor_error_count:
+            self.sensor_error_count[sensor_name] = 0
+        
+        self.sensor_error_count[sensor_name] += 1
+        
+        # 5회 연속 오류 시 센서 비활성화 및 재검색
+        if self.sensor_error_count[sensor_name] >= 5:
+            print(f"⚠️ {sensor_name} 센서 5회 연속 오류 - 센서 비활성화")
+            
+            if sensor_name == 'bh1750':
+                self.bh1750 = None
+            elif sensor_name == 'bme688':
+                self.bme688 = None
+            elif sensor_name == 'sht40':
+                self.sht40 = None
+            
+            # 오류 카운트 리셋
+            self.sensor_error_count[sensor_name] = 0
+            
+            # 센서 구성 업데이트
+            self._update_sensor_config()
+            
+            # 30초 후 재검색 트리거 (백그라운드에서)
+            import threading
+            timer = threading.Timer(30.0, self._rescan_missing_sensors)
+            timer.daemon = True
+            timer.start()
+            print(f"🔄 30초 후 {sensor_name} 센서 재검색 예정")
+    
+    def _rescan_missing_sensors(self):
+        """누락된 센서 재검색"""
+        print("🔄 누락된 센서 재검색 시작...")
+        
+        # SHT40 재검색
+        if not self.sht40:
+            print("🔍 SHT40 센서 재검색 중...")
+            self.sht40 = self._find_sht40()
+            if self.sht40:
+                print("✅ SHT40 센서 재연결됨")
+        
+        # BME688 재검색
+        if not self.bme688:
+            print("🔍 BME688 센서 재검색 중...")
+            self.bme688 = self._find_bme688()
+            if self.bme688:
+                print("✅ BME688 센서 재연결됨")
+        
+        # BH1750 재검색
+        if not self.bh1750:
+            print("🔍 BH1750 센서 재검색 중...")
+            self.bh1750 = self._find_bh1750()
+            if self.bh1750:
+                print("✅ BH1750 센서 재연결됨")
+        
+        # 센서 구성 업데이트
+        self._update_sensor_config()
+    
     def read_all_sensors(self):
         """모든 센서 데이터 읽기"""
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -480,6 +553,11 @@ class SensorManager:
             if sht40_data:
                 result['temperature'] = sht40_data['temperature']
                 result['humidity'] = sht40_data['humidity']
+                # 성공 시 오류 카운트 리셋
+                if 'sht40' in self.sensor_error_count:
+                    self.sensor_error_count['sht40'] = 0
+            else:
+                self._handle_sensor_error('sht40')
         
         # BME688 데이터 읽기 (온도/습도가 없을 때만)
         if self.bme688 and self.bme688.connected:
@@ -495,14 +573,56 @@ class SensorManager:
                 result['gas_resistance'] = bme_data['gas_resistance']
                 result['air_quality'] = bme_data['air_quality']
                 result['absolute_pressure'] = bme_data['pressure']  # 절대압력 = 압력
+                # 성공 시 오류 카운트 리셋
+                if 'bme688' in self.sensor_error_count:
+                    self.sensor_error_count['bme688'] = 0
+            else:
+                self._handle_sensor_error('bme688')
         
         # BH1750 데이터 읽기
         if self.bh1750 and self.bh1750.connected:
             light_data = self.bh1750.read_data()
             if light_data is not None:
                 result['light'] = light_data
+                # 성공 시 오류 카운트 리셋
+                if 'bh1750' in self.sensor_error_count:
+                    self.sensor_error_count['bh1750'] = 0
+            else:
+                self._handle_sensor_error('bh1750')
         
         return result
+    
+    def rescan_sensors_now(self):
+        """즉시 센서 재검색 (API 호출용)"""
+        print("🔄 수동 센서 재검색 시작...")
+        
+        # 기존 센서 상태 저장
+        old_config = self.last_sensor_config.copy()
+        
+        # 모든 센서 재검색
+        self.sht40 = self._find_sht40()
+        self.bme688 = self._find_bme688()
+        self.bh1750 = self._find_bh1750()
+        
+        # 오류 카운트 리셋
+        self.sensor_error_count.clear()
+        
+        # 센서 구성 업데이트
+        self._update_sensor_config()
+        
+        # 변경사항 로그
+        changes = []
+        for sensor, status in self.last_sensor_config.items():
+            if old_config.get(sensor) != status:
+                status_text = "연결됨" if status else "해제됨"
+                changes.append(f"{sensor}: {status_text}")
+        
+        if changes:
+            print(f"🔄 센서 상태 변경: {', '.join(changes)}")
+        else:
+            print("🔄 센서 상태 변경 없음")
+        
+        return self.last_sensor_config
     
     def get_sensor_status(self):
         """센서 연결 상태 반환"""

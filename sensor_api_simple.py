@@ -137,6 +137,7 @@ def get_sensor_status():
             'connected': True,
             'bme688': status['bme688_connected'],
             'bh1750': status['bh1750_connected'],
+            'sht40': status['sht40_connected'],
             'total_sensors': status['sensor_count'],
             'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         })
@@ -145,6 +146,7 @@ def get_sensor_status():
             'connected': False,
             'bme688': False,
             'bh1750': False,
+            'sht40': False,
             'total_sensors': 0,
             'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         })
@@ -327,6 +329,31 @@ def test_i2c_device():
         return jsonify({
             'success': False,
             'message': f'디바이스 테스트 실패: {e}'
+        }), 500
+
+@app.route('/api/sensors/rescan', methods=['POST'])
+def rescan_sensors():
+    """센서 재검색"""
+    global sensor_manager
+    
+    if not sensor_manager:
+        return jsonify({'success': False, 'message': '센서 매니저가 초기화되지 않음'}), 500
+    
+    try:
+        # 센서 재검색 실행
+        new_config = sensor_manager.rescan_sensors_now()
+        
+        return jsonify({
+            'success': True,
+            'message': '센서 재검색이 완료되었습니다',
+            'sensor_config': new_config,
+            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'센서 재검색 실패: {e}'
         }), 500
 
 @app.errorhandler(404)
