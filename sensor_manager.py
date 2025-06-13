@@ -467,19 +467,61 @@ class SensorManager:
         return None
     
     def _find_sdp810(self):
-        """SDP810 차압센서 찾기"""
+        """SDP810 차압센서 찾기 (simpleEddy.py 방식)"""
         for bus_num, bus in self.buses.items():
             for addr in [0x25, 0x26]:  # SDP810 일반적인 주소
                 try:
-                    sdp810 = SDP810Sensor(bus, addr)
-                    if sdp810.connected:
-                        print(f"✅ SDP810 센서 발견 (버스 {bus_num}, 주소 0x{addr:02X})")
-                        return sdp810
+                    # simpleEddy.py 방식으로 직접 통신 테스트
+                    success, pressure, crc_ok = self._test_sdp810_direct(bus, addr)
+                    
+                    if success:
+                        # 통신 성공 시 SDP810Sensor 객체 생성
+                        sdp810 = SDP810Sensor(bus, addr)
+                        if sdp810.connected:
+                            status = "✓" if crc_ok else "⚠"
+                            print(f"✅ SDP810 센서 발견 (버스 {bus_num}, 주소 0x{addr:02X}) - {pressure:.1f} Pa {status}")
+                            return sdp810
                 except Exception as e:
+                    print(f"⚠️ SDP810 테스트 중 오류 (버스 {bus_num}, 주소 0x{addr:02X}): {e}")
                     continue
         
         print("❌ SDP810 센서를 찾을 수 없습니다")
         return None
+    
+    def _test_sdp810_direct(self, bus, address):
+        """SDP810 직접 통신 테스트 (simpleEddy.py 방식)"""
+        try:
+            import struct
+            
+            # 3바이트 직접 읽기 시도
+            read_msg = smbus2.i2c_msg.read(address, 3)
+            bus.i2c_rdwr(read_msg)
+            raw_data = list(read_msg)
+            
+            if len(raw_data) == 3:
+                # CRC 계산
+                crc = 0xFF
+                for byte in raw_data[:2]:
+                    crc ^= byte
+                    for _ in range(8):
+                        if crc & 0x80:
+                            crc = (crc << 1) ^ 0x31
+                        else:
+                            crc = crc << 1
+                        crc &= 0xFF
+                
+                crc_ok = crc == raw_data[2]
+                
+                # 압력 계산 (simpleEddy.py 방식)
+                raw_pressure = struct.unpack('>h', bytes(raw_data[:2]))[0]
+                pressure_pa = raw_pressure / 60.0
+                
+                return True, pressure_pa, crc_ok
+            
+            return False, 0.0, False
+            
+        except Exception:
+            return False, 0.0, False
     
     def _update_sensor_config(self):
         """현재 센서 구성 저장"""
