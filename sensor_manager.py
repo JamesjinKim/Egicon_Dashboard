@@ -364,6 +364,7 @@ class SensorManager:
         self.buses = {}
         self.last_sensor_config = {}  # 마지막 센서 구성 저장
         self.sensor_error_count = {}  # 센서별 오류 카운트
+        self.auto_rescan_enabled = True  # 자동 재검색 활성화
         
         print("🚀 센서 관리자 초기화 (라즈베리파이 전용)")
     
@@ -496,6 +497,9 @@ class SensorManager:
             timer.daemon = True
             timer.start()
             print(f"🔄 30초 후 {sensor_name} 센서 재검색 예정")
+            
+            # 즉시 새 센서 검색도 시도 (다른 주소에 연결되었을 수 있음)
+            self._quick_scan_for_new_sensors()
     
     def _rescan_missing_sensors(self):
         """누락된 센서 재검색"""
@@ -524,6 +528,41 @@ class SensorManager:
         
         # 센서 구성 업데이트
         self._update_sensor_config()
+    
+    def _quick_scan_for_new_sensors(self):
+        """빠른 새 센서 검색 (교체된 센서 즉시 감지)"""
+        if not self.auto_rescan_enabled:
+            return
+            
+        print("⚡ 빠른 센서 검색 시작...")
+        
+        # 현재 없는 센서들만 검색
+        found_new = False
+        
+        if not self.sht40:
+            new_sht40 = self._find_sht40()
+            if new_sht40:
+                self.sht40 = new_sht40
+                found_new = True
+                print("🆕 SHT40 센서 즉시 감지됨!")
+        
+        if not self.bme688:
+            new_bme688 = self._find_bme688()
+            if new_bme688:
+                self.bme688 = new_bme688
+                found_new = True
+                print("🆕 BME688 센서 즉시 감지됨!")
+        
+        if not self.bh1750:
+            new_bh1750 = self._find_bh1750()
+            if new_bh1750:
+                self.bh1750 = new_bh1750
+                found_new = True
+                print("🆕 BH1750 센서 즉시 감지됨!")
+        
+        if found_new:
+            self._update_sensor_config()
+            print("✨ 센서 교체 완료 - 데이터 수집 재개")
     
     def read_all_sensors(self):
         """모든 센서 데이터 읽기"""
