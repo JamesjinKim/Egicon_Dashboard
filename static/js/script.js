@@ -28,7 +28,6 @@ const SENSOR_CHARTS = {
     sps30: {
         pm1: 'sps30-pm1-chart',
         pm25: 'sps30-pm25-chart',
-        pm4: 'sps30-pm4-chart',
         pm10: 'sps30-pm10-chart'
     }
 };
@@ -61,7 +60,6 @@ const SENSOR_WIDGETS = {
     sps30: {
         pm1: 'sps30-pm1-value',
         pm25: 'sps30-pm25-value',
-        pm4: 'sps30-pm4-value',
         pm10: 'sps30-pm10-value',
         status: 'sps30-status'
     }
@@ -108,6 +106,68 @@ async function getConnectedSensors() {
         // 오류 시 기본적으로 virtual만 활성화
         return ['virtual'];
     }
+}
+
+// 센서별 차트 실시간 업데이트
+function updateSensorCharts(sensorType, data) {
+    const chartMapping = {
+        sht40: [
+            { key: 'temperature', value: data.temperature },
+            { key: 'humidity', value: data.humidity }
+        ],
+        bme688: [
+            { key: 'temperature', value: data.temperature },
+            { key: 'humidity', value: data.humidity },
+            { key: 'pressure', value: data.pressure },
+            { key: 'airquality', value: data.air_quality }
+        ],
+        bh1750: [
+            { key: 'light', value: data.light }
+        ],
+        sdp810: [
+            { key: 'pressure', value: data.differential_pressure }
+        ],
+        sps30: [
+            { key: 'pm1', value: data.pm1 },
+            { key: 'pm25', value: data.pm25 },
+            { key: 'pm10', value: data.pm10 }
+        ],
+        virtual: [
+            { key: 'vibration', value: data.vibration }
+        ]
+    };
+
+    const dataToUpdate = chartMapping[sensorType];
+    if (!dataToUpdate) return;
+
+    const currentTime = new Date().toLocaleTimeString('ko-KR', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+    });
+
+    dataToUpdate.forEach(({ key, value }) => {
+        const chartId = SENSOR_CHARTS[sensorType][key];
+        const chart = charts[chartId];
+        
+        if (chart && value !== null && value !== undefined) {
+            const dataset = chart.data.datasets[0];
+            const labels = chart.data.labels;
+            
+            // 새 데이터 점 추가
+            labels.push(currentTime);
+            dataset.data.push(value);
+            
+            // 최대 20개 데이터 점 유지 (온도 차트처럼)
+            if (labels.length > 20) {
+                labels.shift();
+                dataset.data.shift();
+            }
+            
+            // 차트 업데이트
+            chart.update('none'); // 애니메이션 없이 즉시 업데이트
+        }
+    });
 }
 
 // DOM이 로드되면 실행
@@ -185,6 +245,10 @@ async function updateSpecificSensorData(sensorType) {
         
         const data = await response.json();
         updateSensorDisplay(sensorType, data);
+        
+        // 차트 실시간 업데이트 (온도 차트처럼)
+        updateSensorCharts(sensorType, data);
+        
         addSensorLog(`데이터 업데이트 성공`, 'success', sensorType.toUpperCase());
         
     } catch (error) {
@@ -203,6 +267,9 @@ async function updateSensorDataFromFull(sensorType) {
         const fullData = await response.json();
         const sensorData = extractSensorData(sensorType, fullData);
         updateSensorDisplay(sensorType, sensorData);
+        
+        // 차트 실시간 업데이트
+        updateSensorCharts(sensorType, sensorData);
         
     } catch (error) {
         console.error(`❌ ${sensorType} 폴백 업데이트 실패:`, error);
@@ -249,7 +316,6 @@ function extractSensorData(sensorType, fullData) {
             if (fullData.sensor_status?.sps30) {
                 extracted.pm1 = fullData.pm1;
                 extracted.pm25 = fullData.pm25;
-                extracted.pm4 = fullData.pm4;
                 extracted.pm10 = fullData.pm10;
             }
             break;
@@ -375,12 +441,6 @@ function updateSPS30Display(data) {
         const pm25Element = document.getElementById('sps30-pm25-value');
         if (pm25Element) {
             pm25Element.innerHTML = `${data.pm25.toFixed(1)}<span class="widget-unit">μg/m³</span>`;
-        }
-    }
-    if (data.pm4 !== undefined) {
-        const pm4Element = document.getElementById('sps30-pm4-value');
-        if (pm4Element) {
-            pm4Element.innerHTML = `${data.pm4.toFixed(1)}<span class="widget-unit">μg/m³</span>`;
         }
     }
     if (data.pm10 !== undefined) {
@@ -610,7 +670,6 @@ function updateSPS30Section(data) {
         hasData,
         pm1: data.pm1,
         pm25: data.pm25,
-        pm4: data.pm4,
         pm10: data.pm10,
         sensor_status: data.sensor_status
     });
@@ -653,7 +712,6 @@ function setDefaultSPS30Values() {
     const units = {
         pm1: 'μg/m³',
         pm25: 'μg/m³',
-        pm4: 'μg/m³',
         pm10: 'μg/m³',
         airquality: '/100'
     };
@@ -715,7 +773,7 @@ function setupAllCharts(data) {
     setupSensorCharts('sdp810', ['pressure'], timeLabels, dummyHistory, data);
     setupSensorCharts('bh1750', ['light'], timeLabels, dummyHistory, data);
     setupSensorCharts('virtual', ['vibration'], timeLabels, dummyHistory, data);
-    setupSensorCharts('sps30', ['pm1', 'pm25', 'pm4', 'pm10'], timeLabels, dummyHistory, data);
+    setupSensorCharts('sps30', ['pm1', 'pm25', 'pm10'], timeLabels, dummyHistory, data);
     
     // 통합 차트 설정
     setupCombinedChart(timeLabels, dummyHistory);
@@ -750,7 +808,7 @@ function getMultiSensorChartConfig(sensorType, dataType, timeLabels, dummyHistor
         sdp810: { pressure: '#ff3838' },
         bh1750: { light: '#ffb142' },
         virtual: { vibration: '#8c7ae6' },
-        sps30: { pm1: '#2ecc71', pm25: '#f39c12', pm4: '#e74c3c', pm10: '#9b59b6' }
+        sps30: { pm1: '#2ecc71', pm25: '#f39c12', pm10: '#9b59b6' }
     };
     
     const units = {
@@ -762,7 +820,6 @@ function getMultiSensorChartConfig(sensorType, dataType, timeLabels, dummyHistor
         vibration: 'g',
         pm1: 'μg/m³',
         pm25: 'μg/m³',
-        pm4: 'μg/m³',
         pm10: 'μg/m³'
     };
     
@@ -775,7 +832,6 @@ function getMultiSensorChartConfig(sensorType, dataType, timeLabels, dummyHistor
         vibration: '진동',
         pm1: 'PM1.0',
         pm25: 'PM2.5',
-        pm4: 'PM4.0',
         pm10: 'PM10'
     };
     
