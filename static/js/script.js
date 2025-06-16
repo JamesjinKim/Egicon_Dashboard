@@ -82,6 +82,34 @@ let lastSensorData = {};
 let logPaused = false;
 let maxLogEntries = 100;
 
+// 연결된 센서 목록 가져오기
+async function getConnectedSensors() {
+    try {
+        const response = await fetch(`${API_URL}/status`);
+        if (!response.ok) throw new Error('센서 상태 조회 실패');
+        
+        const status = await response.json();
+        const connectedSensors = [];
+        
+        // 각 센서별 연결 상태 확인
+        if (status.sht40) connectedSensors.push('sht40');
+        if (status.bme688) connectedSensors.push('bme688');
+        if (status.bh1750) connectedSensors.push('bh1750');
+        if (status.sdp810) connectedSensors.push('sdp810');
+        if (status.sps30) connectedSensors.push('sps30');
+        
+        // virtual은 항상 연결된 것으로 처리
+        connectedSensors.push('virtual');
+        
+        return connectedSensors;
+        
+    } catch (error) {
+        console.error('센서 상태 확인 실패:', error);
+        // 오류 시 기본적으로 virtual만 활성화
+        return ['virtual'];
+    }
+}
+
 // DOM이 로드되면 실행
 document.addEventListener('DOMContentLoaded', function() {
     const sidebar = document.querySelector('.sidebar');
@@ -112,7 +140,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // 센서별 스케줄러 초기화
-function initializeSensorScheduler() {
+async function initializeSensorScheduler() {
     console.log('🔄 센서별 차별화된 업데이트 스케줄러 시작');
     addSensorLog('센서별 차별화된 업데이트 스케줄러 시작', 'info');
     
@@ -120,19 +148,28 @@ function initializeSensorScheduler() {
     Object.values(sensorTimers).forEach(timer => clearInterval(timer));
     sensorTimers = {};
     
-    // 센서별 독립적인 타이머 설정
+    // 먼저 센서 상태 확인
+    const connectedSensors = await getConnectedSensors();
+    console.log('🔍 연결된 센서들:', connectedSensors);
+    
+    // 연결된 센서들만 타이머 설정
     Object.entries(SENSOR_UPDATE_INTERVALS).forEach(([sensorType, interval]) => {
-        console.log(`📊 ${sensorType} 센서: ${interval}ms 간격으로 업데이트`);
-        addSensorLog(`${interval}ms 간격으로 업데이트 스케줄 설정`, 'info', sensorType.toUpperCase());
-        
-        sensorTimers[sensorType] = setInterval(() => {
-            updateSpecificSensorData(sensorType);
-        }, interval);
-        
-        // 초기 데이터 로드 (0.5초씩 지연하여 동시 호출 방지)
-        setTimeout(() => {
-            updateSpecificSensorData(sensorType);
-        }, Object.keys(SENSOR_UPDATE_INTERVALS).indexOf(sensorType) * 500);
+        if (connectedSensors.includes(sensorType)) {
+            console.log(`📊 ${sensorType} 센서: ${interval}ms 간격으로 업데이트`);
+            addSensorLog(`${interval}ms 간격으로 업데이트 스케줄 설정`, 'info', sensorType.toUpperCase());
+            
+            sensorTimers[sensorType] = setInterval(() => {
+                updateSpecificSensorData(sensorType);
+            }, interval);
+            
+            // 초기 데이터 로드 (0.5초씩 지연하여 동시 호출 방지)
+            setTimeout(() => {
+                updateSpecificSensorData(sensorType);
+            }, connectedSensors.indexOf(sensorType) * 500);
+        } else {
+            console.log(`❌ ${sensorType} 센서: 연결되지 않음 - 스케줄링 생략`);
+            addSensorLog(`연결되지 않음 - 업데이트 생략`, 'warning', sensorType.toUpperCase());
+        }
     });
 }
 
