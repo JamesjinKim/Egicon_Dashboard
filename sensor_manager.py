@@ -11,6 +11,7 @@ import math
 from datetime import datetime
 import constants as const
 from sdp810_sensor import SDP810Sensor
+from sps30_sensor import SPS30Sensor
 
 class BME688Sensor:
     """BME688 환경센서 클래스 (온도, 습도, 압력, 가스저항)"""
@@ -364,17 +365,17 @@ class SensorManager:
         self.bme688_sensors = []   # BME688 센서들  
         self.bh1750_sensors = []   # BH1750 센서들
         self.sdp810_sensors = []   # SDP810 센서들
+        self.sps30_sensors = []    # SPS30 미세먼지 센서들
         
         # 레거시 호환성을 위한 단일 참조 (첫 번째 센서)
         self.sht40 = None
         self.bme688 = None
         self.bh1750 = None
         self.sdp810 = None
+        self.sps30 = None
         
         self.buses = {}
-        self.last_sensor_config = {}  # 마지막 센서 구성 저장
         self.sensor_error_count = {}  # 센서별 오류 카운트
-        self.auto_rescan_enabled = True  # 자동 재검색 활성화
         
         print("🚀 센서 관리자 초기화 (라즈베리파이 전용 - 멀티 센서 지원)")
     
@@ -425,7 +426,14 @@ class SensorManager:
             self.sdp810 = self.sdp810_sensors[0]['sensor']  # 레거시 호환성 - 센서 객체 참조
             success_count += len(self.sdp810_sensors)
         
-        total_sensors = 4
+        # SPS30 센서들 검색 (시리얼 통신)
+        print("🔍 SPS30 센서 검색 중...")
+        self.sps30_sensors = self._find_all_sps30()
+        if self.sps30_sensors:
+            self.sps30 = self.sps30_sensors[0]['sensor']  # 레거시 호환성 - 센서 객체 참조
+            success_count += len(self.sps30_sensors)
+        
+        total_sensors = 5  # SPS30 추가로 5개 센서 타입
         print(f"📊 센서 초기화 완료: {success_count}/{total_sensors}개 센서 연결")
         
         # 현재 센서 구성 저장
@@ -556,6 +564,48 @@ class SensorManager:
         
         return found_sensors
     
+    def _find_all_sps30(self):
+        """모든 SPS30 센서들 찾기 (시리얼 통신)"""
+        found_sensors = []
+        sensor_count = 0
+        
+        print("🔍 SPS30 미세먼지 센서 검색 중...")
+        
+        try:
+            # SPS30 센서 자동 검색
+            port_path, count = SPS30Sensor.find_sps30()
+            
+            if port_path and count > 0:
+                # 센서 연결 시도
+                sps30 = SPS30Sensor(port=port_path)
+                
+                if sps30.connected:
+                    sensor_count += 1
+                    alias = f"SPS30-{sensor_count}"
+                    
+                    sensor_info = {
+                        'sensor': sps30,
+                        'alias': alias,
+                        'type': 'SPS30',
+                        'port': port_path,
+                        'serial_number': sps30.serial_number,
+                        'measurements': ['PM1.0', 'PM2.5', 'PM4.0', 'PM10'],
+                        'units': 'μg/m³'
+                    }
+                    
+                    found_sensors.append(sensor_info)
+                    print(f"✅ {alias} 연결 성공 (포트: {port_path}, S/N: {sps30.serial_number})")
+                else:
+                    print(f"❌ SPS30 센서 연결 실패 (포트: {port_path})")
+            else:
+                print("❌ SPS30 센서를 찾을 수 없습니다")
+                
+        except Exception as e:
+            print(f"❌ SPS30 센서 검색 오류: {e}")
+        
+        print(f"📊 SPS30 센서 검색 완료: {len(found_sensors)}개 발견")
+        return found_sensors
+    
     def _test_sdp810_direct(self, bus, address):
         """SDP810 직접 통신 테스트 (simpleEddy.py 방식)"""
         try:
@@ -591,26 +641,18 @@ class SensorManager:
         except Exception:
             return False, 0.0, False
     
-    def _update_sensor_config(self):
-        """현재 센서 구성 저장"""
-        self.last_sensor_config = {
-            'sht40': self.sht40 is not None and self.sht40.connected,
-            'bme688': self.bme688 is not None and self.bme688.connected,
-            'bh1750': self.bh1750 is not None and self.bh1750.connected,
-            'sdp810': self.sdp810 is not None and self.sdp810.connected
-        }
-        print(f"🔧 센서 구성 업데이트: {self.last_sensor_config}")
     
     def _handle_sensor_error(self, sensor_name):
-        """센서 오류 처리 및 재검색 트리거"""
+        """센서 오류 처리 (자동 재검색 제거)"""
         if sensor_name not in self.sensor_error_count:
             self.sensor_error_count[sensor_name] = 0
         
         self.sensor_error_count[sensor_name] += 1
         
-        # 5회 연속 오류 시 센서 비활성화 및 재검색
+        # 5회 연속 오류 시 센서 비활성화만 수행
         if self.sensor_error_count[sensor_name] >= 5:
             print(f"⚠️ {sensor_name} 센서 5회 연속 오류 - 센서 비활성화")
+            print(f"💡 수동 스캔을 통해 센서를 다시 연결하세요.")
             
             if sensor_name == 'bh1750':
                 self.bh1750 = None
@@ -620,99 +662,13 @@ class SensorManager:
                 self.sht40 = None
             elif sensor_name == 'sdp810':
                 self.sdp810 = None
+            elif sensor_name == 'sps30':
+                self.sps30 = None
             
             # 오류 카운트 리셋
             self.sensor_error_count[sensor_name] = 0
             
-            # 센서 구성 업데이트
-            self._update_sensor_config()
-            
-            # 30초 후 재검색 트리거 (백그라운드에서)
-            import threading
-            timer = threading.Timer(30.0, self._rescan_missing_sensors)
-            timer.daemon = True
-            timer.start()
-            print(f"🔄 30초 후 {sensor_name} 센서 재검색 예정")
-            
-            # 즉시 새 센서 검색도 시도 (다른 주소에 연결되었을 수 있음)
-            self._quick_scan_for_new_sensors()
     
-    def _rescan_missing_sensors(self):
-        """누락된 센서 재검색"""
-        print("🔄 누락된 센서 재검색 시작...")
-        
-        # SHT40 재검색
-        if not self.sht40:
-            print("🔍 SHT40 센서 재검색 중...")
-            self.sht40 = self._find_sht40()
-            if self.sht40:
-                print("✅ SHT40 센서 재연결됨")
-        
-        # BME688 재검색
-        if not self.bme688:
-            print("🔍 BME688 센서 재검색 중...")
-            self.bme688 = self._find_bme688()
-            if self.bme688:
-                print("✅ BME688 센서 재연결됨")
-        
-        # BH1750 재검색
-        if not self.bh1750:
-            print("🔍 BH1750 센서 재검색 중...")
-            self.bh1750 = self._find_bh1750()
-            if self.bh1750:
-                print("✅ BH1750 센서 재연결됨")
-        
-        # SDP810 재검색
-        if not self.sdp810:
-            print("🔍 SDP810 센서 재검색 중...")
-            self.sdp810 = self._find_sdp810()
-            if self.sdp810:
-                print("✅ SDP810 센서 재연결됨")
-        
-        # 센서 구성 업데이트
-        self._update_sensor_config()
-    
-    def _quick_scan_for_new_sensors(self):
-        """빠른 새 센서 검색 (교체된 센서 즉시 감지)"""
-        if not self.auto_rescan_enabled:
-            return
-            
-        print("⚡ 빠른 센서 검색 시작...")
-        
-        # 현재 없는 센서들만 검색
-        found_new = False
-        
-        if not self.sht40:
-            new_sht40 = self._find_sht40()
-            if new_sht40:
-                self.sht40 = new_sht40
-                found_new = True
-                print("🆕 SHT40 센서 즉시 감지됨!")
-        
-        if not self.bme688:
-            new_bme688 = self._find_bme688()
-            if new_bme688:
-                self.bme688 = new_bme688
-                found_new = True
-                print("🆕 BME688 센서 즉시 감지됨!")
-        
-        if not self.bh1750:
-            new_bh1750 = self._find_bh1750()
-            if new_bh1750:
-                self.bh1750 = new_bh1750
-                found_new = True
-                print("🆕 BH1750 센서 즉시 감지됨!")
-        
-        if not self.sdp810:
-            new_sdp810 = self._find_sdp810()
-            if new_sdp810:
-                self.sdp810 = new_sdp810
-                found_new = True
-                print("🆕 SDP810 센서 즉시 감지됨!")
-        
-        if found_new:
-            self._update_sensor_config()
-            print("✨ 센서 교체 완료 - 데이터 수집 재개")
     
     def read_all_sensors(self):
         """모든 센서 데이터 읽기"""
@@ -729,11 +685,17 @@ class SensorManager:
             'gas_resistance': None,
             'air_quality': None,
             'absolute_pressure': None,
+            # SPS30 미세먼지 데이터
+            'pm1': None,               # PM1.0 (μg/m³)
+            'pm25': None,              # PM2.5 (μg/m³)
+            'pm4': None,               # PM4.0 (μg/m³)
+            'pm10': None,              # PM10 (μg/m³)
             'sensor_status': {
                 'bme688': self.bme688 is not None and self.bme688.connected,
                 'bh1750': self.bh1750 is not None and self.bh1750.connected,
                 'sht40': self.sht40 is not None and self.sht40.connected,
-                'sdp810': self.sdp810 is not None and self.sdp810.connected
+                'sdp810': self.sdp810 is not None and self.sdp810.connected,
+                'sps30': self.sps30 is not None and self.sps30.connected
             }
         }
         
@@ -791,6 +753,20 @@ class SensorManager:
                     self.sensor_error_count['sdp810'] = 0
             else:
                 self._handle_sensor_error('sdp810')
+        
+        # SPS30 데이터 읽기 (미세먼지)
+        if self.sps30 and self.sps30.connected:
+            sps30_data = self.sps30.read_data()
+            if sps30_data:
+                result['pm1'] = sps30_data['pm1']
+                result['pm25'] = sps30_data['pm25']
+                result['pm4'] = sps30_data['pm4']
+                result['pm10'] = sps30_data['pm10']
+                # 성공 시 오류 카운트 리셋
+                if 'sps30' in self.sensor_error_count:
+                    self.sensor_error_count['sps30'] = 0
+            else:
+                self._handle_sensor_error('sps30')
         
         return result
     

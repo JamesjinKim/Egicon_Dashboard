@@ -24,6 +24,12 @@ const SENSOR_CHARTS = {
     },
     virtual: {
         vibration: 'virtual-vibration-chart'
+    },
+    sps30: {
+        pm1: 'sps30-pm1-chart',
+        pm25: 'sps30-pm25-chart',
+        pm4: 'sps30-pm4-chart',
+        pm10: 'sps30-pm10-chart'
     }
 };
 
@@ -51,11 +57,28 @@ const SENSOR_WIDGETS = {
     },
     virtual: {
         vibration: 'virtual-vibration-value'
+    },
+    sps30: {
+        pm1: 'sps30-pm1-value',
+        pm25: 'sps30-pm25-value',
+        pm4: 'sps30-pm4-value',
+        pm10: 'sps30-pm10-value',
+        status: 'sps30-status'
     }
 };
 
-let updateInterval;
-let isUpdating = false;
+// 센서별 업데이트 간격 설정 (밀리초)
+const SENSOR_UPDATE_INTERVALS = {
+    sht40: 5000,      // 5초 - 온도/습도 변화 매우 느림
+    bme688: 3000,     // 3초 - 가스저항은 중간 속도
+    bh1750: 1000,     // 1초 - 조도 변화 빠름 (조명, 그림자)
+    sdp810: 500,      // 0.5초 - 차압 변화 가장 빠름
+    sps30: 3000,      // 3초 - 미세먼지 변화 중간 속도
+    virtual: 2000     // 2초 - 가상 진동 센서
+};
+
+let sensorTimers = {};
+let lastSensorData = {};
 
 // DOM이 로드되면 실행
 document.addEventListener('DOMContentLoaded', function() {
@@ -79,9 +102,248 @@ document.addEventListener('DOMContentLoaded', function() {
         updateSensorData();
     });
     
-    // 3초마다 자동 업데이트
-    setInterval(updateSensorData, 3000);
+    // 센서별 차별화된 업데이트 간격
+    initializeSensorScheduler();
 });
+
+// 센서별 스케줄러 초기화
+function initializeSensorScheduler() {
+    console.log('🔄 센서별 차별화된 업데이트 스케줄러 시작');
+    
+    // 기존 타이머 정리
+    Object.values(sensorTimers).forEach(timer => clearInterval(timer));
+    sensorTimers = {};
+    
+    // 센서별 독립적인 타이머 설정
+    Object.entries(SENSOR_UPDATE_INTERVALS).forEach(([sensorType, interval]) => {
+        console.log(`📊 ${sensorType} 센서: ${interval}ms 간격으로 업데이트`);
+        
+        sensorTimers[sensorType] = setInterval(() => {
+            updateSpecificSensorData(sensorType);
+        }, interval);
+        
+        // 초기 데이터 로드 (0.5초씩 지연하여 동시 호출 방지)
+        setTimeout(() => {
+            updateSpecificSensorData(sensorType);
+        }, Object.keys(SENSOR_UPDATE_INTERVALS).indexOf(sensorType) * 500);
+    });
+}
+
+// 특정 센서 데이터 업데이트
+async function updateSpecificSensorData(sensorType) {
+    try {
+        const response = await fetch(`${API_URL}/current-sensor/${sensorType}`);
+        
+        if (!response.ok) {
+            // 개별 센서 API가 없는 경우 전체 데이터에서 추출
+            return updateSensorDataFromFull(sensorType);
+        }
+        
+        const data = await response.json();
+        updateSensorDisplay(sensorType, data);
+        
+    } catch (error) {
+        console.warn(`⚠️ ${sensorType} 센서 데이터 업데이트 실패:`, error);
+        // 개별 실패해도 다른 센서에 영향 없음
+    }
+}
+
+// 전체 데이터에서 특정 센서 데이터 추출 (폴백)
+async function updateSensorDataFromFull(sensorType) {
+    try {
+        const response = await fetch(`${API_URL}/current`);
+        if (!response.ok) throw new Error('전체 데이터 조회 실패');
+        
+        const fullData = await response.json();
+        const sensorData = extractSensorData(sensorType, fullData);
+        updateSensorDisplay(sensorType, sensorData);
+        
+    } catch (error) {
+        console.error(`❌ ${sensorType} 폴백 업데이트 실패:`, error);
+    }
+}
+
+// 전체 데이터에서 센서별 데이터 추출
+function extractSensorData(sensorType, fullData) {
+    const extracted = {
+        timestamp: fullData.timestamp,
+        sensor_status: fullData.sensor_status
+    };
+    
+    switch(sensorType) {
+        case 'sht40':
+            if (fullData.sensor_status?.sht40) {
+                extracted.temperature = fullData.temperature;
+                extracted.humidity = fullData.humidity;
+            }
+            break;
+        case 'bme688':
+            if (fullData.sensor_status?.bme688) {
+                extracted.temperature = fullData.temperature;
+                extracted.humidity = fullData.humidity;
+                extracted.pressure = fullData.pressure;
+                extracted.gas_resistance = fullData.gas_resistance;
+                extracted.air_quality = fullData.air_quality;
+            }
+            break;
+        case 'bh1750':
+            if (fullData.sensor_status?.bh1750) {
+                extracted.light = fullData.light;
+            }
+            break;
+        case 'sdp810':
+            if (fullData.sensor_status?.sdp810) {
+                extracted.differential_pressure = fullData.differential_pressure;
+            }
+            break;
+        case 'virtual':
+            extracted.vibration = fullData.vibration;
+            break;
+        case 'sps30':
+            if (fullData.sensor_status?.sps30) {
+                extracted.pm1 = fullData.pm1;
+                extracted.pm25 = fullData.pm25;
+                extracted.pm4 = fullData.pm4;
+                extracted.pm10 = fullData.pm10;
+            }
+            break;
+    }
+    
+    return extracted;
+}
+
+// 센서별 UI 업데이트
+function updateSensorDisplay(sensorType, data) {
+    // 데이터 변화 확인
+    const dataKey = `${sensorType}_${data.timestamp}`;
+    if (lastSensorData[sensorType] === dataKey) {
+        return; // 변화 없으면 UI 업데이트 스킵
+    }
+    lastSensorData[sensorType] = dataKey;
+    
+    // 센서 상태 업데이트
+    const statusElement = document.getElementById(SENSOR_WIDGETS[sensorType]?.status);
+    if (statusElement) {
+        const isConnected = data.sensor_status?.[sensorType] || false;
+        statusElement.textContent = isConnected ? '연결됨' : '미연결';
+        statusElement.className = `sensor-status-indicator ${isConnected ? 'connected' : 'disconnected'}`;
+    }
+    
+    // 센서별 데이터 업데이트
+    switch(sensorType) {
+        case 'sht40':
+            updateSHT40Display(data);
+            break;
+        case 'bme688':
+            updateBME688Display(data);
+            break;
+        case 'bh1750':
+            updateBH1750Display(data);
+            break;
+        case 'sdp810':
+            updateSDP810Display(data);
+            break;
+        case 'virtual':
+            updateVirtualDisplay(data);
+            break;
+        case 'sps30':
+            updateSPS30Display(data);
+            break;
+    }
+    
+    console.log(`📊 ${sensorType} 업데이트 완료:`, data);
+}
+
+// 센서별 개별 업데이트 함수들
+function updateSHT40Display(data) {
+    if (data.temperature !== undefined) {
+        const tempElement = document.getElementById('sht40-temp-value');
+        if (tempElement) {
+            tempElement.innerHTML = `${data.temperature.toFixed(1)}<span class="widget-unit">°C</span>`;
+        }
+    }
+    if (data.humidity !== undefined) {
+        const humidElement = document.getElementById('sht40-humidity-value');
+        if (humidElement) {
+            humidElement.innerHTML = `${data.humidity.toFixed(1)}<span class="widget-unit">%</span>`;
+        }
+    }
+}
+
+function updateBME688Display(data) {
+    if (data.temperature !== undefined) {
+        const tempElement = document.getElementById('bme688-temp-value');
+        if (tempElement) {
+            tempElement.innerHTML = `${data.temperature.toFixed(1)}<span class="widget-unit">°C</span>`;
+        }
+    }
+    if (data.pressure !== undefined) {
+        const pressElement = document.getElementById('bme688-pressure-value');
+        if (pressElement) {
+            pressElement.innerHTML = `${data.pressure.toFixed(1)}<span class="widget-unit">hPa</span>`;
+        }
+    }
+    if (data.air_quality !== undefined) {
+        const aqElement = document.getElementById('bme688-airquality-value');
+        if (aqElement) {
+            aqElement.innerHTML = `${Math.round(data.air_quality)}<span class="widget-unit">/100</span>`;
+        }
+    }
+}
+
+function updateBH1750Display(data) {
+    if (data.light !== undefined) {
+        const lightElement = document.getElementById('bh1750-light-value');
+        if (lightElement) {
+            lightElement.innerHTML = `${Math.round(data.light)}<span class="widget-unit">lux</span>`;
+        }
+    }
+}
+
+function updateSDP810Display(data) {
+    if (data.differential_pressure !== undefined) {
+        const pressElement = document.getElementById('sdp810-pressure-value');
+        if (pressElement) {
+            pressElement.innerHTML = `${data.differential_pressure.toFixed(1)}<span class="widget-unit">Pa</span>`;
+        }
+    }
+}
+
+function updateVirtualDisplay(data) {
+    if (data.vibration !== undefined) {
+        const vibElement = document.getElementById('virtual-vibration-value');
+        if (vibElement) {
+            vibElement.innerHTML = `${data.vibration.toFixed(2)}<span class="widget-unit">g</span>`;
+        }
+    }
+}
+
+function updateSPS30Display(data) {
+    if (data.pm1 !== undefined) {
+        const pm1Element = document.getElementById('sps30-pm1-value');
+        if (pm1Element) {
+            pm1Element.innerHTML = `${data.pm1.toFixed(1)}<span class="widget-unit">μg/m³</span>`;
+        }
+    }
+    if (data.pm25 !== undefined) {
+        const pm25Element = document.getElementById('sps30-pm25-value');
+        if (pm25Element) {
+            pm25Element.innerHTML = `${data.pm25.toFixed(1)}<span class="widget-unit">μg/m³</span>`;
+        }
+    }
+    if (data.pm4 !== undefined) {
+        const pm4Element = document.getElementById('sps30-pm4-value');
+        if (pm4Element) {
+            pm4Element.innerHTML = `${data.pm4.toFixed(1)}<span class="widget-unit">μg/m³</span>`;
+        }
+    }
+    if (data.pm10 !== undefined) {
+        const pm10Element = document.getElementById('sps30-pm10-value');
+        if (pm10Element) {
+            pm10Element.innerHTML = `${data.pm10.toFixed(1)}<span class="widget-unit">μg/m³</span>`;
+        }
+    }
+}
 
 // 센서 데이터 초기 로드
 async function loadSensorData() {
