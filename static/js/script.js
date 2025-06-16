@@ -244,7 +244,7 @@ async function updateSpecificSensorData(sensorType) {
         }
         
         const data = await response.json();
-        updateSensorDisplay(sensorType, data);
+        updateIndividualSensorDisplay(sensorType, data);
         
         // 차트 실시간 업데이트 (온도 차트처럼)
         updateSensorCharts(sensorType, data);
@@ -266,7 +266,7 @@ async function updateSensorDataFromFull(sensorType) {
         
         const fullData = await response.json();
         const sensorData = extractSensorData(sensorType, fullData);
-        updateSensorDisplay(sensorType, sensorData);
+        updateIndividualSensorDisplay(sensorType, sensorData);
         
         // 차트 실시간 업데이트
         updateSensorCharts(sensorType, sensorData);
@@ -530,6 +530,118 @@ async function updateSensorData() {
         console.error('데이터 업데이트 오류:', error);
         document.getElementById('db-status').textContent = '데이터베이스 상태: 오류';
     }
+}
+
+// 개별 센서 디스플레이 업데이트 (개별 API 응답용)
+function updateIndividualSensorDisplay(sensorType, data) {
+    try {
+        console.log(`🔍 ${sensorType} 개별 센서 업데이트:`, data);
+        
+        const statusElement = document.getElementById(SENSOR_WIDGETS[sensorType].status);
+        let isConnected = false;
+        let hasValidData = false;
+        
+        // 개별 센서 API 응답 구조 처리
+        if (data && typeof data === 'object') {
+            // connected 필드 확인
+            isConnected = data.connected === true;
+            
+            // 센서별 데이터 유효성 검사
+            hasValidData = checkSensorDataValidity(sensorType, data);
+        }
+        
+        console.log(`   📊 연결상태: ${isConnected}, 데이터유효: ${hasValidData}`);
+        
+        // 상태 표시 업데이트
+        if (statusElement) {
+            if (isConnected && hasValidData) {
+                statusElement.textContent = '연결됨';
+                statusElement.className = 'sensor-status-indicator connected';
+            } else if (isConnected && !hasValidData) {
+                statusElement.textContent = '데이터 없음';
+                statusElement.className = 'sensor-status-indicator warning';
+            } else {
+                statusElement.textContent = '연결 안됨';
+                statusElement.className = 'sensor-status-indicator disconnected';
+            }
+        }
+        
+        // 데이터 업데이트
+        if (isConnected && hasValidData) {
+            updateSensorWidgets(sensorType, data);
+            addSensorLog(`데이터 업데이트 성공`, 'success', sensorType.toUpperCase());
+        } else {
+            setDefaultSensorValues(sensorType);
+            if (isConnected && !hasValidData) {
+                addSensorLog('센서 연결됨, 데이터 대기 중', 'warning', sensorType.toUpperCase());
+            } else {
+                addSensorLog('센서 미연결', 'error', sensorType.toUpperCase());
+            }
+        }
+        
+    } catch (error) {
+        console.error(`${sensorType} 센서 디스플레이 업데이트 오류:`, error);
+        setSensorDisconnected(sensorType);
+    }
+}
+
+// 센서 데이터 유효성 검사
+function checkSensorDataValidity(sensorType, data) {
+    switch (sensorType) {
+        case 'sht40':
+        case 'bme688':
+            return data.temperature !== undefined && data.temperature !== null &&
+                   data.humidity !== undefined && data.humidity !== null;
+        case 'bh1750':
+            return data.light !== undefined && data.light !== null;
+        case 'sdp810':
+            return data.differential_pressure !== undefined && data.differential_pressure !== null;
+        case 'sps30':
+            return data.pm1 !== undefined && data.pm1 !== null &&
+                   data.pm25 !== undefined && data.pm25 !== null;
+        case 'virtual':
+            return data.vibration !== undefined && data.vibration !== null;
+        default:
+            return false;
+    }
+}
+
+// 센서별 위젯 업데이트
+function updateSensorWidgets(sensorType, data) {
+    switch (sensorType) {
+        case 'sht40':
+            updateSensorWidget('sht40', 'temperature', data.temperature, '°C');
+            updateSensorWidget('sht40', 'humidity', data.humidity, '%');
+            break;
+        case 'bme688':
+            updateSensorWidget('bme688', 'temperature', data.temperature, '°C');
+            updateSensorWidget('bme688', 'humidity', data.humidity, '%');
+            updateSensorWidget('bme688', 'pressure', data.pressure, 'hPa');
+            updateSensorWidget('bme688', 'airquality', data.air_quality, '/100');
+            break;
+        case 'bh1750':
+            updateSensorWidget('bh1750', 'light', data.light, 'lux');
+            break;
+        case 'sdp810':
+            updateSensorWidget('sdp810', 'pressure', data.differential_pressure, 'Pa');
+            break;
+        case 'sps30':
+            updateSPS30Display(data);
+            break;
+        case 'virtual':
+            updateVirtualSensors(data);
+            break;
+    }
+}
+
+// 개별 센서를 연결 안됨 상태로 설정
+function setSensorDisconnected(sensorType) {
+    const statusElement = document.getElementById(SENSOR_WIDGETS[sensorType].status);
+    if (statusElement) {
+        statusElement.textContent = '연결 안됨';
+        statusElement.className = 'sensor-status-indicator disconnected';
+    }
+    setDefaultSensorValues(sensorType);
 }
 
 // 모든 센서 디스플레이 업데이트
