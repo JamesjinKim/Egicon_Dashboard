@@ -119,13 +119,8 @@ class SPS30Sensor:
                 print(f"✅ SPS30 센서 연결 성공")
                 print(f"📊 시리얼 번호: {self.serial_number}")
                 
-                # 측정 시작 (초기화 시 한 번만)
-                try:
-                    device.start_measurement()
-                    print("✅ SPS30 측정 시작됨")
-                    time.sleep(3)  # 측정 안정화 대기
-                except Exception as e:
-                    print(f"⚠️ SPS30 측정 시작 실패: {e}")
+                # 센서 안정화 대기 (측정 시작은 read_data에서 처리)
+                time.sleep(1)
                 
                 return True
                 
@@ -170,23 +165,33 @@ class SPS30Sensor:
             with ShdlcSerialPort(port=self.port_path, baudrate=115200) as port:
                 device = Sps30ShdlcDevice(ShdlcConnection(port))
                 
-                # 데이터 읽기만 수행 (매번 start_measurement 호출하지 않음)
+                # 첫 번째 시도: 데이터 읽기
                 raw_data = device.read_measured_value()
                 print(f"🔍 SPS30 원시 데이터: {raw_data} (길이: {len(raw_data) if raw_data else 0})")
                 
                 if not raw_data or len(raw_data) < 3:
                     print(f"⚠️ SPS30 데이터 부족: {len(raw_data) if raw_data else 0}개")
-                    # 데이터가 없으면 측정을 다시 시작해봄
+                    # 정상 동작 코드처럼 센서 리셋 후 재초기화
                     try:
-                        print("🔄 SPS30 측정 재시작 시도...")
+                        print("🔄 SPS30 센서 리셋 및 재초기화...")
+                        device.device_reset()
+                        print("✅ SPS30 센서 리셋 완료")
+                        time.sleep(2)  # 리셋 후 대기
+                        
+                        # 측정 시작
                         device.start_measurement()
-                        time.sleep(3)  # 안정화 대기
+                        print("✅ SPS30 측정 시작")
+                        time.sleep(5)  # 충분한 안정화 대기 (정상 코드와 동일)
+                        
+                        # 데이터 재시도
                         raw_data = device.read_measured_value()
-                        print(f"🔍 SPS30 재시도 데이터: {raw_data} (길이: {len(raw_data) if raw_data else 0})")
+                        print(f"🔍 SPS30 재초기화 후 데이터: {raw_data} (길이: {len(raw_data) if raw_data else 0})")
+                        
                     except Exception as e:
-                        print(f"⚠️ SPS30 측정 재시작 실패: {e}")
+                        print(f"⚠️ SPS30 센서 리셋 실패: {e}")
                     
                     if not raw_data or len(raw_data) < 3:
+                        print("❌ SPS30 센서 리셋 후에도 데이터 없음")
                         return None
                 
                 # 정상 작동하는 코드의 안전한 숫자 변환 함수 사용
