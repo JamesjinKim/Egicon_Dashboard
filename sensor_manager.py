@@ -376,6 +376,7 @@ class SensorManager:
         
         self.buses = {}
         self.sensor_error_count = {}  # 센서별 오류 카운트
+        self.last_sensor_config = {}  # 센서 구성 저장
         
         print("🚀 센서 관리자 초기화 (라즈베리파이 전용 - 멀티 센서 지원)")
     
@@ -440,6 +441,16 @@ class SensorManager:
         self._update_sensor_config()
         
         return success_count > 0  # 하나라도 연결되면 성공
+    
+    def _update_sensor_config(self):
+        """현재 센서 구성 업데이트"""
+        self.last_sensor_config = {
+            'sht40': self.sht40 is not None and self.sht40.connected,
+            'bme688': self.bme688 is not None and self.bme688.connected,
+            'bh1750': self.bh1750 is not None and self.bh1750.connected,
+            'sdp810': self.sdp810 is not None and self.sdp810.connected,
+            'sps30': self.sps30 is not None and self.sps30.connected
+        }
     
     def _find_all_sht40(self):
         """모든 SHT40 센서들 찾기"""

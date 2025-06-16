@@ -76,7 +76,7 @@ class SPS30Sensor:
             try:
                 print(f"🔌 포트 테스트 중: {port_path}")
                 
-                with ShdlcSerialPort(port=port_path, baudrate=115200, timeout=2) as port:
+                with ShdlcSerialPort(port=port_path, baudrate=115200) as port:
                     device = Sps30ShdlcDevice(ShdlcConnection(port))
                     
                     # 센서 정보 읽기 시도
@@ -106,7 +106,7 @@ class SPS30Sensor:
             print(f"🔌 SPS30 센서 연결 시도: {self.port_path}")
             
             # 센서 연결 테스트
-            with ShdlcSerialPort(port=self.port_path, baudrate=115200, timeout=3) as port:
+            with ShdlcSerialPort(port=self.port_path, baudrate=115200) as port:
                 device = Sps30ShdlcDevice(ShdlcConnection(port))
                 
                 # 센서 정보 확인
