@@ -380,8 +380,8 @@ async function loadSensorData() {
     showLoading();
     
     try {
-        // 현재 센서 데이터 가져오기 (멀티 센서 지원)
-        const response = await fetch(`${API_URL}/current-multi`);
+        // 현재 센서 데이터 가져오기 (SPS30 포함)
+        const response = await fetch(`${API_URL}/current`);
         
         if (!response.ok) {
             throw new Error('서버 응답 오류');
@@ -413,8 +413,8 @@ async function loadSensorData() {
 // 센서 데이터 업데이트
 async function updateSensorData() {
     try {
-        // 현재 데이터 가져오기 (멀티 센서 지원)
-        const currentResponse = await fetch(`${API_URL}/current-multi`);
+        // 현재 데이터 가져오기 (SPS30 포함)
+        const currentResponse = await fetch(`${API_URL}/current`);
         
         if (!currentResponse.ok) {
             throw new Error('현재 데이터 조회 오류');
@@ -564,9 +564,19 @@ function updateSPS30Section(data) {
     const statusElement = document.getElementById(SENSOR_WIDGETS.sps30.status);
     const sectionElement = document.getElementById('sps30-section');
     
-    // 센서 상태 확인
+    // 센서 상태 확인 (/api/current 엔드포인트 데이터 구조에 맞게)
     const isConnected = data.sensor_status && data.sensor_status.sps30;
-    const hasData = data.pm1 !== undefined && data.pm1 !== null;
+    const hasData = data.pm1 !== undefined && data.pm1 !== null && data.pm25 !== undefined && data.pm25 !== null;
+    
+    console.log('🔍 SPS30 섹션 업데이트:', {
+        isConnected,
+        hasData,
+        pm1: data.pm1,
+        pm25: data.pm25,
+        pm4: data.pm4,
+        pm10: data.pm10,
+        sensor_status: data.sensor_status
+    });
     
     if (statusElement) {
         if (isConnected && hasData) {

@@ -546,6 +546,87 @@ def debug_sps30():
     
     return jsonify(debug_info)
 
+# ============================
+# 개별 센서 데이터 API 엔드포인트 (404 오류 해결)
+# ============================
+
+@app.route('/api/current-sensor/<sensor_type>', methods=['GET'])
+def get_current_sensor_data(sensor_type):
+    """개별 센서 데이터 조회"""
+    global sensor_manager
+    
+    if not sensor_manager:
+        return jsonify({'error': '센서 매니저가 초기화되지 않음', 'connected': False}), 500
+    
+    try:
+        # 전체 센서 데이터 읽기
+        all_data = sensor_manager.read_all_sensors()
+        
+        # 센서 타입별 데이터 반환
+        response_data = {
+            'timestamp': all_data['timestamp'],
+            'connected': False,
+            'value': None,
+            'unit': '',
+            'sensor_type': sensor_type
+        }
+        
+        if sensor_type == 'bme688':
+            response_data.update({
+                'connected': all_data['sensor_status'].get('bme688', False),
+                'temperature': all_data.get('temperature'),
+                'humidity': all_data.get('humidity'),
+                'pressure': all_data.get('pressure'),
+                'gas_resistance': all_data.get('gas_resistance'),
+                'air_quality': all_data.get('air_quality')
+            })
+        elif sensor_type == 'sht40':
+            response_data.update({
+                'connected': all_data['sensor_status'].get('sht40', False),
+                'temperature': all_data.get('temperature'),
+                'humidity': all_data.get('humidity')
+            })
+        elif sensor_type == 'bh1750':
+            response_data.update({
+                'connected': all_data['sensor_status'].get('bh1750', False),
+                'light': all_data.get('light'),
+                'unit': 'lux'
+            })
+        elif sensor_type == 'sdp810':
+            response_data.update({
+                'connected': all_data['sensor_status'].get('sdp810', False),
+                'differential_pressure': all_data.get('differential_pressure'),
+                'unit': 'Pa'
+            })
+        elif sensor_type == 'sps30':
+            response_data.update({
+                'connected': all_data['sensor_status'].get('sps30', False),
+                'pm1': all_data.get('pm1'),
+                'pm25': all_data.get('pm25'),
+                'pm4': all_data.get('pm4'),
+                'pm10': all_data.get('pm10'),
+                'unit': 'μg/m³'
+            })
+        elif sensor_type == 'virtual':
+            # 가상 센서 또는 계산된 값들
+            response_data.update({
+                'connected': True,
+                'vibration': all_data.get('vibration', 0.0),
+                'unit': 'various'
+            })
+        else:
+            return jsonify({'error': f'알 수 없는 센서 타입: {sensor_type}'}), 400
+        
+        return jsonify(response_data)
+        
+    except Exception as e:
+        return jsonify({
+            'error': f'센서 데이터 읽기 실패: {e}',
+            'connected': False,
+            'sensor_type': sensor_type,
+            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        }), 500
+
 @app.errorhandler(404)
 def not_found(error):
     return jsonify({'error': 'API 엔드포인트를 찾을 수 없음'}), 404

@@ -236,30 +236,39 @@ class SPS30Sensor:
                         except Exception:
                             return 0.0
                     
-                    # 데이터 파싱 (정상 동작 코드와 동일한 방식)
-                    pm1_val = safe_float(raw_data[0])
-                    pm25_val = safe_float(raw_data[1])
-                    pm10_val = safe_float(raw_data[2])
-                    pm4_val = 0.0  # 기본값
+                    # SPS30 데이터 구조 분석 및 파싱
+                    # raw_data는 일반적으로 ((질량농도), (개수농도), 평균입자크기) 형태
+                    print(f"🔍 SPS30 데이터 구조 분석: {type(raw_data)} - {raw_data}")
+                    
+                    # 첫 번째 튜플이 질량 농도 데이터 (μg/m³)
+                    if isinstance(raw_data[0], tuple) and len(raw_data[0]) >= 4:
+                        mass_concentrations = raw_data[0]
+                        pm1_val = safe_float(mass_concentrations[0])    # PM1.0
+                        pm25_val = safe_float(mass_concentrations[1])   # PM2.5  
+                        pm4_val = safe_float(mass_concentrations[2])    # PM4.0
+                        pm10_val = safe_float(mass_concentrations[3])   # PM10
+                        
+                        print(f"✅ SPS30 질량농도 데이터: PM1.0={pm1_val:.1f} PM2.5={pm25_val:.1f} PM4.0={pm4_val:.1f} PM10={pm10_val:.1f} μg/m³")
+                    else:
+                        # 단순 배열 형태인 경우 (이전 방식)
+                        pm1_val = safe_float(raw_data[0])
+                        pm25_val = safe_float(raw_data[1])
+                        pm10_val = safe_float(raw_data[2])
+                        pm4_val = 0.0  # 기본값
+                        
+                        if len(raw_data) >= 4:
+                            pm4_val = safe_float(raw_data[2])
+                            pm10_val = safe_float(raw_data[3])
+                        
+                        print(f"✅ SPS30 단순배열 데이터: PM1.0={pm1_val:.1f} PM2.5={pm25_val:.1f} PM4.0={pm4_val:.1f} PM10={pm10_val:.1f} μg/m³")
                     
                     measurement = {
                         'pm1': pm1_val,
                         'pm25': pm25_val,
-                        'pm4': pm4_val,  # 3개 데이터인 경우 PM4.0 없음
+                        'pm4': pm4_val,
                         'pm10': pm10_val,
                         'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                     }
-                    
-                    # 4개 이상 데이터가 있는 경우 PM4.0 포함
-                    if len(raw_data) >= 4:
-                        pm4_val = safe_float(raw_data[2])
-                        pm10_val = safe_float(raw_data[3])
-                        measurement['pm4'] = pm4_val
-                        measurement['pm10'] = pm10_val
-                        print(f"✅ SPS30 데이터(4개): PM1.0={pm1_val:.1f} PM2.5={pm25_val:.1f} PM4.0={pm4_val:.1f} PM10={pm10_val:.1f}")
-                    else:
-                        # 3개 데이터: PM1.0, PM2.5, PM10
-                        print(f"✅ SPS30 데이터(3개): PM1.0={pm1_val:.1f} PM2.5={pm25_val:.1f} PM10={pm10_val:.1f}")
                     
                     self.last_measurement = measurement
                     return measurement  # 성공 시 즉시 반환
