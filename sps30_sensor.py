@@ -119,8 +119,13 @@ class SPS30Sensor:
                 print(f"✅ SPS30 센서 연결 성공")
                 print(f"📊 시리얼 번호: {self.serial_number}")
                 
-                # 센서 안정화 대기
-                time.sleep(1)
+                # 측정 시작 (초기화 시 한 번만)
+                try:
+                    device.start_measurement()
+                    print("✅ SPS30 측정 시작됨")
+                    time.sleep(3)  # 측정 안정화 대기
+                except Exception as e:
+                    print(f"⚠️ SPS30 측정 시작 실패: {e}")
                 
                 return True
                 
@@ -165,40 +170,65 @@ class SPS30Sensor:
             with ShdlcSerialPort(port=self.port_path, baudrate=115200) as port:
                 device = Sps30ShdlcDevice(ShdlcConnection(port))
                 
-                # 측정이 시작되지 않았다면 시작
-                try:
-                    device.start_measurement()
-                    time.sleep(2)  # 측정 안정화 대기 (1초 → 2초로 증가)
-                except Exception as e:
-                    print(f"⚠️ SPS30 측정 시작 중 오류 (무시됨): {e}")
-                    pass  # 이미 측정 중일 수 있음
-                
-                # 데이터 읽기
+                # 데이터 읽기만 수행 (매번 start_measurement 호출하지 않음)
                 raw_data = device.read_measured_value()
                 print(f"🔍 SPS30 원시 데이터: {raw_data} (길이: {len(raw_data) if raw_data else 0})")
                 
                 if not raw_data or len(raw_data) < 3:
                     print(f"⚠️ SPS30 데이터 부족: {len(raw_data) if raw_data else 0}개")
-                    return None
+                    # 데이터가 없으면 측정을 다시 시작해봄
+                    try:
+                        print("🔄 SPS30 측정 재시작 시도...")
+                        device.start_measurement()
+                        time.sleep(3)  # 안정화 대기
+                        raw_data = device.read_measured_value()
+                        print(f"🔍 SPS30 재시도 데이터: {raw_data} (길이: {len(raw_data) if raw_data else 0})")
+                    except Exception as e:
+                        print(f"⚠️ SPS30 측정 재시작 실패: {e}")
+                    
+                    if not raw_data or len(raw_data) < 3:
+                        return None
                 
-                # 데이터 파싱
-                pm1_val = self._safe_float(raw_data[0])
-                pm25_val = self._safe_float(raw_data[1])
-                pm10_val = self._safe_float(raw_data[2])
-                pm4_val = 0.0
+                # 정상 작동하는 코드의 안전한 숫자 변환 함수 사용
+                def safe_float(value):
+                    try:
+                        if isinstance(value, (int, float)):
+                            return float(value)
+                        elif isinstance(value, str):
+                            return float(value)
+                        elif isinstance(value, tuple) and len(value) > 0:
+                            return float(value[0])  # 튜플의 첫 번째 값 사용
+                        elif hasattr(value, '__float__'):
+                            return float(value)
+                        else:
+                            return 0.0
+                    except Exception:
+                        return 0.0
                 
-                # 4개 데이터가 있는 경우 PM4.0 포함
-                if len(raw_data) >= 4:
-                    pm4_val = self._safe_float(raw_data[2])
-                    pm10_val = self._safe_float(raw_data[3])
+                # 데이터 파싱 (정상 동작 코드와 동일한 방식)
+                pm1_val = safe_float(raw_data[0])
+                pm25_val = safe_float(raw_data[1])
+                pm10_val = safe_float(raw_data[2])
+                pm4_val = 0.0  # 기본값
                 
                 measurement = {
                     'pm1': pm1_val,
                     'pm25': pm25_val,
-                    'pm4': pm4_val,
+                    'pm4': pm4_val,  # 3개 데이터인 경우 PM4.0 없음
                     'pm10': pm10_val,
                     'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 }
+                
+                # 4개 이상 데이터가 있는 경우 PM4.0 포함
+                if len(raw_data) >= 4:
+                    pm4_val = safe_float(raw_data[2])
+                    pm10_val = safe_float(raw_data[3])
+                    measurement['pm4'] = pm4_val
+                    measurement['pm10'] = pm10_val
+                    print(f"✅ SPS30 데이터(4개): PM1.0={pm1_val:.1f} PM2.5={pm25_val:.1f} PM4.0={pm4_val:.1f} PM10={pm10_val:.1f}")
+                else:
+                    # 3개 데이터: PM1.0, PM2.5, PM10
+                    print(f"✅ SPS30 데이터(3개): PM1.0={pm1_val:.1f} PM2.5={pm25_val:.1f} PM10={pm10_val:.1f}")
                 
                 self.last_measurement = measurement
                 return measurement
