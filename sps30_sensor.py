@@ -7,6 +7,7 @@ SPS30 미세먼지 센서 클래스
 
 import time
 import glob
+import threading
 from datetime import datetime
 from typing import Optional, Dict, List, Tuple
 
@@ -20,6 +21,14 @@ except ImportError:
     print("⚠️ SPS30 라이브러리가 설치되지 않았습니다.")
     print("설치 명령: pip install sensirion-shdlc-sps30")
     SPS30_AVAILABLE = False
+
+# 전역 SPS30 접근 제어
+_sps30_lock = threading.Lock()
+_sps30_last_access = 0
+_sps30_min_interval = 2.0  # 최소 2초 간격
+_sps30_cached_data = None
+_sps30_cache_time = 0
+_sps30_cache_valid_duration = 1.5  # 1.5초 동안 캐시 유효
 
 
 class SPS30Sensor:
@@ -146,7 +155,7 @@ class SPS30Sensor:
     
     def read_data(self) -> Optional[Dict]:
         """
-        센서 데이터 읽기
+        센서 데이터 읽기 (접근 제어 및 캐싱 적용)
         
         Returns:
             Dict: {
@@ -161,63 +170,75 @@ class SPS30Sensor:
         if not self.connected or not SPS30_AVAILABLE:
             return None
         
-        max_retries = 2  # 최대 재시도 횟수
+        # 전역 접근 제어 및 캐싱
+        global _sps30_lock, _sps30_last_access, _sps30_cached_data, _sps30_cache_time
+        
+        current_time = time.time()
+        
+        # 캐시된 데이터가 유효한지 확인
+        if (_sps30_cached_data is not None and 
+            current_time - _sps30_cache_time < _sps30_cache_valid_duration):
+            print(f"📋 SPS30 캐시된 데이터 반환 (캐시 나이: {current_time - _sps30_cache_time:.1f}초)")
+            return _sps30_cached_data.copy()
+        
+        # 접근 제어 락 획득 시도 (비블로킹)
+        if not _sps30_lock.acquire(blocking=False):
+            print("🔒 SPS30 다른 프로세스에서 사용 중 - 캐시된 데이터 반환")
+            return _sps30_cached_data.copy() if _sps30_cached_data else None
+        
+        try:
+            # 최소 간격 확인
+            time_since_last = current_time - _sps30_last_access
+            if time_since_last < _sps30_min_interval:
+                wait_time = _sps30_min_interval - time_since_last
+                print(f"⏳ SPS30 접근 간격 대기: {wait_time:.1f}초")
+                time.sleep(wait_time)
+            
+            # 실제 센서 데이터 읽기
+            new_data = self._read_sensor_data()
+            _sps30_last_access = time.time()
+            
+            if new_data:
+                _sps30_cached_data = new_data.copy()
+                _sps30_cache_time = time.time()
+                print(f"✅ SPS30 새 데이터 읽기 성공 및 캐시 업데이트")
+                return new_data
+            else:
+                print(f"❌ SPS30 센서 데이터 읽기 실패")
+                return _sps30_cached_data.copy() if _sps30_cached_data else None
+                
+        finally:
+            _sps30_lock.release()
+    
+    def _read_sensor_data(self) -> Optional[Dict]:
+        """실제 센서 데이터 읽기 (내부 메서드)"""
+        max_retries = 1  # 재시도 횟수 줄임
         
         for attempt in range(max_retries + 1):
             try:
                 with ShdlcSerialPort(port=self.port_path, baudrate=115200) as port:
                     device = Sps30ShdlcDevice(ShdlcConnection(port))
                     
-                    # 첫 번째 시도가 아닌 경우, 센서 상태 확인 및 초기화
+                    # 재시도인 경우 간단한 리셋만 수행
                     if attempt > 0:
                         print(f"🔄 SPS30 재시도 {attempt}/{max_retries}")
                         try:
-                            # 측정 중지 (상태 초기화)
-                            try:
-                                device.stop_measurement()
-                                time.sleep(1)
-                            except Exception:
-                                pass  # 이미 중지된 경우 무시
-                            
-                            # 센서 리셋
                             device.device_reset()
-                            print("✅ SPS30 센서 리셋 완료")
-                            time.sleep(3)  # 리셋 후 충분한 대기
-                            
-                            # 측정 시작
+                            time.sleep(2)
                             device.start_measurement()
-                            print("✅ SPS30 측정 재시작")
-                            
-                            # 안정화 대기 및 상태 확인
-                            for wait_time in range(8):  # 8초 대기하면서 상태 확인
-                                time.sleep(1)
-                                try:
-                                    ready = device.read_data_ready()
-                                    if ready:
-                                        print(f"✅ SPS30 측정 준비 완료 ({wait_time + 1}초 후)")
-                                        break
-                                except Exception:
-                                    pass
-                            else:
-                                print("⚠️ SPS30 측정 준비 상태 확인 불가")
-                            
-                        except Exception as reset_error:
-                            print(f"⚠️ SPS30 리셋 중 오류: {reset_error}")
-                            if attempt == max_retries:
-                                return None
-                            continue
+                            time.sleep(3)
+                        except Exception as e:
+                            print(f"⚠️ SPS30 리셋 실패: {e}")
+                            return None
                     
                     # 데이터 읽기 시도
                     raw_data = device.read_measured_value()
-                    print(f"🔍 SPS30 원시 데이터 (시도 {attempt + 1}): {raw_data} (길이: {len(raw_data) if raw_data else 0})")
                     
                     # 데이터 유효성 검사
-                    if not raw_data or len(raw_data) < 3:
-                        print(f"⚠️ SPS30 데이터 부족: {len(raw_data) if raw_data else 0}개")
+                    if not raw_data or len(raw_data) < 2:
                         if attempt < max_retries:
                             continue  # 다음 시도로
                         else:
-                            print("❌ SPS30 모든 시도 실패")
                             return None
                     
                     # 정상 작동하는 코드의 안전한 숫자 변환 함수 사용

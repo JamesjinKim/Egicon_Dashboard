@@ -321,13 +321,20 @@ class SensorManager:
     
     
     def _handle_sensor_error(self, sensor_name):
-        """센서 오류 처리 (자동 재검색 제거)"""
+        """센서 오류 처리 (SPS30은 비활성화하지 않음)"""
         if sensor_name not in self.sensor_error_count:
             self.sensor_error_count[sensor_name] = 0
         
         self.sensor_error_count[sensor_name] += 1
         
-        # 5회 연속 오류 시 센서 비활성화만 수행
+        # SPS30은 비활성화하지 않고 오류 카운트만 리셋
+        if sensor_name == 'sps30':
+            if self.sensor_error_count[sensor_name] >= 10:  # 더 높은 임계값
+                print(f"⚠️ SPS30 센서 {self.sensor_error_count[sensor_name]}회 오류 - 오류 카운트 리셋")
+                self.sensor_error_count[sensor_name] = 0  # 카운트만 리셋, 센서는 유지
+            return
+        
+        # 다른 센서들은 기존 로직 유지
         if self.sensor_error_count[sensor_name] >= 5:
             print(f"⚠️ {sensor_name} 센서 5회 연속 오류 - 센서 비활성화")
             print(f"💡 수동 스캔을 통해 센서를 다시 연결하세요.")
@@ -340,8 +347,6 @@ class SensorManager:
                 self.sht40 = None
             elif sensor_name == 'sdp810':
                 self.sdp810 = None
-            elif sensor_name == 'sps30':
-                self.sps30 = None
             
             # 오류 카운트 리셋
             self.sensor_error_count[sensor_name] = 0
@@ -432,34 +437,26 @@ class SensorManager:
             else:
                 self._handle_sensor_error('sdp810')
         
-        # SPS30 데이터 읽기 (미세먼지)
+        # SPS30 데이터 읽기 (미세먼지) - 간소화된 로직
         if self.sps30 and self.sps30.connected:
-            print(f"🔍 SPS30 데이터 읽기 시도... (연결상태: {self.sps30.connected})")
             try:
                 sps30_data = self.sps30.read_data()
                 if sps30_data:
-                    print(f"✅ SPS30 데이터 읽기 성공: PM1.0={sps30_data['pm1']:.1f}, PM2.5={sps30_data['pm25']:.1f}, PM4.0={sps30_data['pm4']:.1f}, PM10={sps30_data['pm10']:.1f}μg/m³")
                     result['pm1'] = sps30_data['pm1']
                     result['pm25'] = sps30_data['pm25']
                     result['pm4'] = sps30_data['pm4']
                     result['pm10'] = sps30_data['pm10']
-                    # 센서 상태 업데이트
                     result['sensor_status']['sps30'] = True
                     # 성공 시 오류 카운트 리셋
                     if 'sps30' in self.sensor_error_count:
                         self.sensor_error_count['sps30'] = 0
                 else:
-                    print(f"❌ SPS30 데이터 읽기 실패 - read_data() 반환값이 None")
+                    result['sensor_status']['sps30'] = False
                     self._handle_sensor_error('sps30')
-            except Exception as e:
-                print(f"❌ SPS30 데이터 읽기 예외 발생: {e}")
+            except Exception:
+                result['sensor_status']['sps30'] = False
                 self._handle_sensor_error('sps30')
         else:
-            if self.sps30:
-                print(f"⚠️ SPS30 객체 존재하지만 연결 상태: {self.sps30.connected}")
-            else:
-                print(f"❌ SPS30 객체가 None입니다")
-            # 센서 상태를 False로 명시적 설정
             result['sensor_status']['sps30'] = False
         
         return result
