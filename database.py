@@ -34,18 +34,21 @@ class SensorDatabase:
         with self.get_connection() as conn:
             cursor = conn.cursor()
             
-            # 센서 정보 테이블
+            # 센서 정보 테이블 (확장된 스키마)
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS sensors (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    address INTEGER UNIQUE NOT NULL,
+                    address INTEGER,
                     name VARCHAR(50) NOT NULL,
                     type VARCHAR(50) NOT NULL,
                     description TEXT,
                     voltage VARCHAR(20),
+                    communication_type VARCHAR(20) DEFAULT 'I2C',
+                    port_info VARCHAR(100),
                     is_default BOOLEAN DEFAULT 0,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(address, communication_type)
                 )
             ''')
             
@@ -69,64 +72,84 @@ class SensorDatabase:
             conn.commit()
     
     def insert_default_sensors(self):
-        """기본 센서 정보 삽입 (gui_scanner.py의 device_info 기반)"""
-        default_sensors = [
+        """기본 센서 정보 삽입 (I2C 및 시리얼 센서 포함)"""
+        # I2C 센서들
+        i2c_sensors = [
             # BH1750 조도센서
-            (0x23, "BH1750", "광센서", "디지털 조도 센서", "3.3V/5V"),
-            (0x5C, "BH1750", "광센서", "디지털 조도 센서 (ADDR=H)", "3.3V/5V"),
+            (0x23, "BH1750", "광센서", "디지털 조도 센서", "3.3V/5V", "I2C"),
+            (0x5C, "BH1750", "광센서", "디지털 조도 센서 (ADDR=H)", "3.3V/5V", "I2C"),
             
             # ADS1115/TMP102
-            (0x48, "ADS1115/TMP102", "ADC/온도센서", "16비트 ADC 또는 온도센서", "3.3V/5V"),
-            (0x49, "ADS1115/TMP102", "ADC/온도센서", "16비트 ADC 또는 온도센서", "3.3V/5V"),
-            (0x4A, "ADS1115/TMP102", "ADC/온도센서", "16비트 ADC 또는 온도센서", "3.3V/5V"),
-            (0x4B, "ADS1115/TMP102", "ADC/온도센서", "16비트 ADC 또는 온도센서", "3.3V/5V"),
+            (0x48, "ADS1115/TMP102", "ADC/온도센서", "16비트 ADC 또는 온도센서", "3.3V/5V", "I2C"),
+            (0x49, "ADS1115/TMP102", "ADC/온도센서", "16비트 ADC 또는 온도센서", "3.3V/5V", "I2C"),
+            (0x4A, "ADS1115/TMP102", "ADC/온도센서", "16비트 ADC 또는 온도센서", "3.3V/5V", "I2C"),
+            (0x4B, "ADS1115/TMP102", "ADC/온도센서", "16비트 ADC 또는 온도센서", "3.3V/5V", "I2C"),
             
             # DS3231/MPU6050
-            (0x68, "DS3231/MPU6050", "RTC/IMU", "실시간 시계 또는 6축 IMU", "3.3V/5V"),
-            (0x69, "MPU6050", "IMU 센서", "6축 관성측정장치", "3.3V/5V"),
+            (0x68, "DS3231/MPU6050", "RTC/IMU", "실시간 시계 또는 6축 IMU", "3.3V/5V", "I2C"),
+            (0x69, "MPU6050", "IMU 센서", "6축 관성측정장치", "3.3V/5V", "I2C"),
             
             # BME688 환경센서
-            (0x76, "BME688", "온습도환경센서", "온습도기압 또는 가스센서", "3.3V"),
-            (0x77, "BME688", "온습도환경센서", "온습도기압 또는 가스센서", "3.3V"),
+            (0x76, "BME688", "온습도환경센서", "온습도기압 또는 가스센서", "3.3V", "I2C"),
+            (0x77, "BME688", "온습도환경센서", "온습도기압 또는 가스센서", "3.3V", "I2C"),
             
             # MLX90614 적외선 온도센서
-            (0x5A, "MLX90614", "적외선 온도센서", "비접촉 적외선 온도계", "3.3V/5V"),
+            (0x5A, "MLX90614", "적외선 온도센서", "비접촉 적외선 온도계", "3.3V/5V", "I2C"),
             
             # ADXL345 가속도센서
-            (0x1D, "ADXL345", "가속도센서", "3축 가속도 센서", "3.3V"),
-            (0x53, "ADXL345", "가속도센서", "3축 가속도 센서", "3.3V"),
+            (0x1D, "ADXL345", "가속도센서", "3축 가속도 센서", "3.3V", "I2C"),
+            (0x53, "ADXL345", "가속도센서", "3축 가속도 센서", "3.3V", "I2C"),
             
             # SSD1306 OLED 디스플레이
-            (0x3C, "SSD1306", "OLED 디스플레이", "128x64 OLED 디스플레이", "3.3V"),
-            (0x3D, "SSD1306", "OLED 디스플레이", "128x64 OLED 디스플레이", "3.3V"),
+            (0x3C, "SSD1306", "OLED 디스플레이", "128x64 OLED 디스플레이", "3.3V", "I2C"),
+            (0x3D, "SSD1306", "OLED 디스플레이", "128x64 OLED 디스플레이", "3.3V", "I2C"),
             
             # SHT40 온습도센서
-            (0x44, "SHT40", "온습도센서", "고정밀 디지털 온습도 센서", "3.3V"),
-            (0x45, "SHT40", "온습도센서", "고정밀 디지털 온습도 센서 (ALT)", "3.3V"),
+            (0x44, "SHT40", "온습도센서", "고정밀 디지털 온습도 센서", "3.3V", "I2C"),
+            (0x45, "SHT40", "온습도센서", "고정밀 디지털 온습도 센서 (ALT)", "3.3V", "I2C"),
             
             # SDP810 차압센서
-            (0x25, "SDP810", "차압센서", "차압정보를 제공해 주는 센서", "3.3V"),
+            (0x25, "SDP810", "차압센서", "차압정보를 제공해 주는 센서", "3.3V", "I2C"),
+        ]
+        
+        # 시리얼/UART 센서들
+        serial_sensors = [
+            # SPS30 미세먼지센서
+            (None, "SPS30", "미세먼지센서", "PM1.0/PM2.5/PM4.0/PM10 미세먼지 측정 센서", "5V", "UART", "/dev/ttyUSB*"),
         ]
         
         with self.get_connection() as conn:
             cursor = conn.cursor()
             
-            for address, name, sensor_type, description, voltage in default_sensors:
+            # I2C 센서들 삽입
+            for address, name, sensor_type, description, voltage, comm_type in i2c_sensors:
                 try:
                     cursor.execute('''
                         INSERT OR IGNORE INTO sensors 
-                        (address, name, type, description, voltage, is_default)
-                        VALUES (?, ?, ?, ?, ?, 1)
-                    ''', (address, name, sensor_type, description, voltage))
+                        (address, name, type, description, voltage, communication_type, is_default)
+                        VALUES (?, ?, ?, ?, ?, ?, 1)
+                    ''', (address, name, sensor_type, description, voltage, comm_type))
                 except sqlite3.IntegrityError:
                     # 이미 존재하는 주소는 무시
                     pass
             
-            # 기존 센서 중 기본 센서로 업데이트해야 할 항목들
+            # 시리얼 센서들 삽입
+            for address, name, sensor_type, description, voltage, comm_type, port_info in serial_sensors:
+                try:
+                    cursor.execute('''
+                        INSERT OR IGNORE INTO sensors 
+                        (address, name, type, description, voltage, communication_type, port_info, is_default)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+                    ''', (address, name, sensor_type, description, voltage, comm_type, port_info))
+                except sqlite3.IntegrityError:
+                    # 이미 존재하는 센서는 무시
+                    pass
+            
+            # 기존 I2C 센서 중 기본 센서로 업데이트해야 할 항목들
             cursor.execute('''
                 UPDATE sensors 
                 SET is_default = 1, name = ?, type = ?, description = ?, voltage = ?
-                WHERE address = 0x25 AND is_default = 0
+                WHERE address = 0x25 AND communication_type = 'I2C' AND is_default = 0
             ''', ("SDP810", "차압센서", "차압정보를 제공해 주는 센서", "3.3V"))
             
             conn.commit()
@@ -142,31 +165,42 @@ class SensorDatabase:
             
             return [dict(row) for row in cursor.fetchall()]
     
-    def get_sensor_by_address(self, address: int) -> Optional[Dict]:
+    def get_sensor_by_address(self, address: int, comm_type: str = "I2C") -> Optional[Dict]:
         """주소로 센서 정보 조회"""
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute('SELECT * FROM sensors WHERE address = ?', (address,))
+            cursor.execute('SELECT * FROM sensors WHERE address = ? AND communication_type = ?', (address, comm_type))
             
             row = cursor.fetchone()
             return dict(row) if row else None
     
-    def add_sensor(self, address: int, name: str, sensor_type: str, 
-                   description: str = "", voltage: str = "3.3V") -> bool:
-        """새 센서 추가"""
+    def get_sensor_by_name(self, name: str) -> Optional[Dict]:
+        """이름으로 센서 정보 조회 (시리얼 센서용)"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT * FROM sensors WHERE name = ?', (name,))
+            
+            row = cursor.fetchone()
+            return dict(row) if row else None
+    
+    def add_sensor(self, address: Optional[int], name: str, sensor_type: str, 
+                   description: str = "", voltage: str = "3.3V", 
+                   comm_type: str = "I2C", port_info: Optional[str] = None) -> bool:
+        """새 센서 추가 (I2C 및 시리얼 센서 지원)"""
         try:
             with self.get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute('''
-                    INSERT INTO sensors (address, name, type, description, voltage, is_default)
-                    VALUES (?, ?, ?, ?, ?, 0)
-                ''', (address, name, sensor_type, description, voltage))
+                    INSERT INTO sensors (address, name, type, description, voltage, 
+                                       communication_type, port_info, is_default)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, 0)
+                ''', (address, name, sensor_type, description, voltage, comm_type, port_info))
                 
                 conn.commit()
                 return True
                 
         except sqlite3.IntegrityError:
-            # 이미 존재하는 주소
+            # 이미 존재하는 센서
             return False
     
     def update_sensor(self, sensor_id: int, name: str, sensor_type: str, 
