@@ -3,23 +3,36 @@
 ## 📁 폴더 구조
 
 ```
-egdash/
-├── templates/               # Flask 템플릿 파일들
-│   ├── base.html           # 기본 레이아웃 템플릿
-│   ├── index.html          # 기존 단일 파일 (레거시)
-│   ├── pages/              # 페이지별 템플릿
-│   │   └── dashboard.html  # 메인 대시보드 페이지
-│   └── components/         # 재사용 가능한 컴포넌트들
-│
-├── static/                 # 정적 파일들
-│   ├── css/               # CSS 스타일시트
-│   │   └── styles.css     # 메인 스타일시트
-│   ├── js/                # JavaScript 파일들
-│   │   └── script.js      # 메인 JavaScript
-│   └── images/            # 이미지 파일들
-│
-├── sensor_api_simple.py   # Flask 애플리케이션 메인 파일
-└── sensor_manager.py      # 센서 관리 모듈
+📁 최종 정리된 프로젝트 구조
+
+  egdash/
+  ├── 📱 메인 애플리케이션
+  │   ├── sensor_api_simple.py      # Flask 웹 서버
+  │   └── sensor_manager.py         # 센서 관리자 (리팩토링됨)
+  │
+  ├── 🔧 센서 클래스들 (모듈화)
+  │   ├── bme688_sensor.py          # BME688 환경센서
+  │   ├── sht40_sensor.py           # SHT40 온습도센서  
+  │   ├── bh1750_sensor.py          # BH1750 조도센서
+  │   ├── sdp810_sensor.py          # SDP810 차압센서
+  │   └── sps30_sensor.py           # SPS30 미세먼지센서
+  │
+  ├── 🛠️ 지원 모듈들
+  │   ├── constants.py              # BME688 상수
+  │   ├── database.py               # 센서 DB 관리
+  │   └── i2c_scanner.py            # I2C 스캐너
+  │
+  ├── 🌐 웹 인터페이스
+  │   ├── templates/                # HTML 템플릿
+  │   └── static/                   # CSS, JS 파일
+  │
+  ├── 📚 문서들
+  │   ├── README.md
+  │   ├── INSTALLATION_GUIDE.md
+  │   └── README_UI_STRUCTURE.md
+  │
+  └── 🗂️ 백업
+      └── backup_deprecated/        # 사용하지 않는 파일들
 ```
 
 ## 🚀 새로운 UI 페이지 추가하기

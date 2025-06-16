@@ -1,0 +1,45 @@
+이 프로젝트는 라즈베리파이 4B 모델 B 버전에서 작동하는 프로젝트로 아래와 같은 구조를 갖고 있습니다.
+egdash/
+├── templates/               # Flask 템플릿 파일들
+│   ├── base.html           # 기본 레이아웃 템플릿
+│   ├── index.html          # 기존 단일 파일 (레거시)
+│   ├── pages/              # 페이지별 템플릿
+│   │   └── dashboard.html  # 메인 대시보드 페이지
+│   └── components/         # 재사용 가능한 컴포넌트들
+│
+├── static/                 # 정적 파일들
+│   ├── css/               # CSS 스타일시트
+│   │   └── styles.css     # 메인 스타일시트
+│   ├── js/                # JavaScript 파일들
+│   │   └── script.js      # 메인 JavaScript
+│   └── images/            # 이미지 파일들
+│
+├── sensor_api_simple.py   # Flask 애플리케이션 메인 파일
+└── sensor_manager.py      # 센서 관리 모듈
+
+그 중에서 핵심 모둘은 
+sensor_api_simple.py   # Flask 애플리케이션 메인 파일
+sensor_manager.py      # 센서 관리 모듈
+둘로 볼 수 있습니다. 이 두 모듈이 센서를 접근하고 관리하는 방법을 개선하려고 합니다.
+
+1.constants.py 파일은 BME688 센서 데이터를 처리하는 데 필요한 상수들을 정의하고 있습니다. 
+이 파일은 수정없이 계속 유지하고 BME688 센서 Class에서 참조하면 됩니다.
+2.database.py 파일은 센서 데이터를 저장하고 관리하는 데 필요한 기능을 가지고 있습니다. 필요시 참고하고 새로운 센서 추가나 변경시 수정해야 합니다.
+3.i2c_scanner.py EG-Dash I2C 스캐너 모듈 (라즈베리파이 전용)로 실제 I2C 하드웨어만 지원합니다.
+  이 코드는 새로운 센서가 추가되면 추가된 센서의 I2C 주소를 스캔하고 센서 목록에 추가하는 목적을 가집니다.
+4.각종 센서들은 sensor_manager.py      # 센서 관리 모듈
+ 을 통해 관리 되어야 합니다.
+ 그러나 센서가 늘어 나면 sensor_manager.py 가 너무 비대해지고 복잡해 집니다. 이 문제를 해결하기 위해
+ 각 센서별 class 파일을 따로 만들어 sensor_manager.py와 연동 되도록 해야 합니다.
+ 이런 센서용 class 파일은 다음과 같습니다.
+ sdp810_sensor.py, simpleBME688.py, simpleEddy.py, sdp810_sensor.py 가 있습니다.
+
+위 내용으로 구현되고 있는지 검토하고 그 결과를 토의하고 싶습니다.
+
+
+
+
+
+
+
+

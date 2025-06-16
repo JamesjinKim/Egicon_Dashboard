@@ -2,6 +2,7 @@
 """
 EG-Dash 센서 관리자 (라즈베리파이 전용)
 실제 I2C 센서만 지원, 더미 데이터 생성 제거
+각 센서 클래스를 별도 파일에서 import
 """
 
 import time
@@ -10,350 +11,12 @@ import random
 import math
 from datetime import datetime
 import constants as const
+from bme688_sensor import BME688Sensor
+from sht40_sensor import SHT40Sensor
+from bh1750_sensor import BH1750Sensor
 from sdp810_sensor import SDP810Sensor
 from sps30_sensor import SPS30Sensor
 
-class BME688Sensor:
-    """BME688 환경센서 클래스 (온도, 습도, 압력, 가스저항)"""
-    
-    def __init__(self, bus, address=0x76):
-        self.bus = bus
-        self.address = address
-        self.connected = False
-        self.calibration_data = {}
-        
-        # 연결 테스트 및 초기화
-        self.connected = self._initialize()
-    
-    def _initialize(self):
-        """BME688 센서 초기화"""
-        try:
-            # 칩 ID 확인
-            chip_id = self.bus.read_byte_data(self.address, 0xD0)
-            if chip_id != 0x61:
-                print(f"❌ BME688 칩 ID 불일치: 0x{chip_id:02X} (예상: 0x61)")
-                return False
-            
-            print(f"✅ BME688 센서 감지됨 (주소: 0x{self.address:02X})")
-            
-            # 소프트 리셋
-            self.bus.write_byte_data(self.address, 0xE0, 0xB6)
-            time.sleep(0.01)
-            
-            # 캘리브레이션 데이터 읽기
-            self._read_calibration_data()
-            
-            # 측정 설정
-            self._configure_sensor()
-            
-            return True
-            
-        except Exception as e:
-            print(f"❌ BME688 초기화 실패: {e}")
-            return False
-    
-    def _read_calibration_data(self):
-        """캘리브레이션 데이터 읽기 (간소화)"""
-        try:
-            # 온도 캘리브레이션
-            self.calibration_data['T1'] = self.bus.read_word_data(self.address, 0xE9)
-            self.calibration_data['T2'] = self.bus.read_word_data(self.address, 0x8A)
-            self.calibration_data['T3'] = self.bus.read_byte_data(self.address, 0x8C)
-            
-            # 압력 캘리브레이션 (일부만)
-            self.calibration_data['P1'] = self.bus.read_word_data(self.address, 0x8E)
-            self.calibration_data['P2'] = self.bus.read_word_data(self.address, 0x90)
-            
-            # 습도 캘리브레이션 (일부만)
-            self.calibration_data['H1'] = self.bus.read_byte_data(self.address, 0xE2)
-            self.calibration_data['H2'] = self.bus.read_byte_data(self.address, 0xE3)
-            
-            print("✅ BME688 캘리브레이션 데이터 읽기 완료")
-            
-        except Exception as e:
-            print(f"⚠️ BME688 캘리브레이션 읽기 실패: {e}")
-            # 기본값 설정
-            self.calibration_data = {
-                'T1': 27504, 'T2': 26435, 'T3': 3,
-                'P1': 36477, 'P2': -10685,
-                'H1': 515, 'H2': 694
-            }
-    
-    def _configure_sensor(self):
-        """센서 측정 설정"""
-        try:
-            # 습도 오버샘플링 설정 (x1)
-            self.bus.write_byte_data(self.address, 0x72, 0x01)
-            
-            # 온도/압력 오버샘플링 및 모드 설정 (강제 모드)
-            self.bus.write_byte_data(self.address, 0x74, 0x25)  # temp x1, press x1, forced mode
-            
-            time.sleep(0.01)
-            
-        except Exception as e:
-            print(f"⚠️ BME688 설정 실패: {e}")
-    
-    def read_data(self):
-        """센서 데이터 읽기"""
-        if not self.connected:
-            return None
-        
-        try:
-            # 강제 모드로 측정 시작
-            self.bus.write_byte_data(self.address, 0x74, 0x25)
-            time.sleep(0.1)  # 측정 대기
-            
-            # 상태 확인
-            status = self.bus.read_byte_data(self.address, 0x1D)
-            if not (status & 0x80):  # 측정 완료 확인
-                print("⚠️ BME688 측정 미완료")
-                return None
-            
-            # 원시 데이터 읽기
-            temp_data = self.bus.read_i2c_block_data(self.address, 0x22, 3)
-            press_data = self.bus.read_i2c_block_data(self.address, 0x1F, 3)
-            hum_data = self.bus.read_i2c_block_data(self.address, 0x25, 2)
-            gas_data = self.bus.read_i2c_block_data(self.address, 0x2A, 2)
-            
-            # 데이터 변환 (간소화된 공식)
-            temp_raw = (temp_data[0] << 12) | (temp_data[1] << 4) | (temp_data[2] >> 4)
-            press_raw = (press_data[0] << 12) | (press_data[1] << 4) | (press_data[2] >> 4)
-            hum_raw = (hum_data[0] << 8) | hum_data[1]
-            gas_raw = (gas_data[0] << 2) | (gas_data[1] >> 6)
-            
-            # 실제 값으로 변환 (간소화된 알고리즘)
-            temperature = self._compensate_temperature(temp_raw)
-            pressure = self._compensate_pressure(press_raw, temperature)
-            humidity = self._compensate_humidity(hum_raw, temperature)
-            gas_resistance = self._compensate_gas(gas_raw)
-            
-            return {
-                'temperature': temperature,
-                'humidity': humidity,
-                'pressure': pressure,
-                'gas_resistance': gas_resistance,
-                'air_quality': self._calculate_air_quality(gas_resistance)
-            }
-            
-        except Exception as e:
-            print(f"❌ BME688 데이터 읽기 실패: {e}")
-            return None
-    
-    def _compensate_temperature(self, temp_raw):
-        """온도 보정 (간소화)"""
-        if not temp_raw:
-            return 0.0
-        
-        # 간소화된 온도 계산
-        var1 = (temp_raw / 16384.0 - self.calibration_data['T1'] / 1024.0) * self.calibration_data['T2']
-        var2 = ((temp_raw / 131072.0 - self.calibration_data['T1'] / 8192.0) * 
-                (temp_raw / 131072.0 - self.calibration_data['T1'] / 8192.0)) * (self.calibration_data['T3'] * 16.0)
-        
-        temperature = (var1 + var2) / 5120.0
-        return max(-40.0, min(85.0, temperature))  # 센서 범위 제한
-    
-    def _compensate_pressure(self, press_raw, temperature):
-        """압력 보정 (간소화)"""
-        if not press_raw:
-            return 0.0
-        
-        # 간소화된 압력 계산
-        pressure = press_raw / 64.0 - 102400.0
-        pressure = pressure + (self.calibration_data['P1'] - 16384) / 16384.0 * temperature
-        pressure = max(300.0, min(1100.0, pressure))  # hPa 범위 제한
-        
-        return pressure
-    
-    def _compensate_humidity(self, hum_raw, temperature):
-        """습도 보정 (간소화)"""
-        if not hum_raw:
-            return 0.0
-        
-        # 간소화된 습도 계산
-        humidity = hum_raw * 100.0 / 65536.0
-        humidity = humidity + (temperature - 25.0) * 0.1  # 온도 보정
-        
-        return max(0.0, min(100.0, humidity))  # 습도 범위 제한
-    
-    def _compensate_gas(self, gas_raw):
-        """가스 저항 보정 (간소화)"""
-        if not gas_raw:
-            return 0.0
-        
-        # 간소화된 가스 저항 계산
-        gas_resistance = gas_raw * 1000.0  # 옴 단위
-        return max(0.0, min(200000.0, gas_resistance))
-    
-    def _calculate_air_quality(self, gas_resistance):
-        """공기질 지수 계산 (0-100)"""
-        if gas_resistance <= 0:
-            return 0
-        
-        # 가스 저항값을 기반으로 공기질 점수 계산
-        # 높은 저항값 = 좋은 공기질
-        if gas_resistance > 50000:
-            return min(100, int(gas_resistance / 1000))
-        else:
-            return max(0, int(gas_resistance / 500))
-
-
-class SHT40Sensor:
-    """SHT40 온습도센서 클래스"""
-    
-    # SHT40 명령어
-    CMD_MEASURE_HIGH_PRECISION = 0xFD
-    CMD_SOFT_RESET = 0x94
-    
-    def __init__(self, bus, address=0x44):
-        self.bus = bus
-        self.address = address
-        self.connected = False
-        
-        # 연결 테스트 및 초기화
-        self.connected = self._initialize()
-    
-    def _initialize(self):
-        """SHT40 센서 초기화"""
-        try:
-            # 소프트 리셋으로 연결 확인
-            write_msg = smbus2.i2c_msg.write(self.address, [self.CMD_SOFT_RESET])
-            self.bus.i2c_rdwr(write_msg)
-            time.sleep(0.01)
-            
-            # 측정 명령 테스트
-            write_msg = smbus2.i2c_msg.write(self.address, [self.CMD_MEASURE_HIGH_PRECISION])
-            self.bus.i2c_rdwr(write_msg)
-            time.sleep(0.02)
-            
-            # 데이터 읽기 테스트
-            read_msg = smbus2.i2c_msg.read(self.address, 6)
-            self.bus.i2c_rdwr(read_msg)
-            
-            print(f"✅ SHT40 센서 초기화 완료 (주소: 0x{self.address:02X})")
-            return True
-            
-        except Exception as e:
-            print(f"❌ SHT40 초기화 실패: {e}")
-            return False
-    
-    def _calculate_crc(self, data):
-        """CRC-8 체크섬 계산"""
-        POLYNOMIAL = 0x31
-        CRC = 0xFF
-        for byte in data:
-            CRC ^= byte
-            for _ in range(8):
-                if CRC & 0x80:
-                    CRC = ((CRC << 1) ^ POLYNOMIAL) & 0xFF
-                else:
-                    CRC = (CRC << 1) & 0xFF
-        return CRC
-    
-    def read_data(self):
-        """온도와 습도 측정"""
-        if not self.connected:
-            return None
-            
-        try:
-            # 고정밀 측정 명령 전송
-            write_msg = smbus2.i2c_msg.write(self.address, [self.CMD_MEASURE_HIGH_PRECISION])
-            self.bus.i2c_rdwr(write_msg)
-            time.sleep(0.02)
-            
-            # 6바이트 데이터 읽기
-            read_msg = smbus2.i2c_msg.read(self.address, 6)
-            self.bus.i2c_rdwr(read_msg)
-            
-            # 읽은 데이터 처리
-            data = list(read_msg)
-            
-            if len(data) >= 6:
-                # 온도 및 습도 데이터 분리
-                t_data = [data[0], data[1]]
-                t_crc = data[2]
-                rh_data = [data[3], data[4]]
-                rh_crc = data[5]
-                
-                # CRC 검증
-                t_crc_ok = self._calculate_crc(t_data) == t_crc
-                rh_crc_ok = self._calculate_crc(rh_data) == rh_crc
-                
-                if not (t_crc_ok and rh_crc_ok):
-                    print("⚠️ SHT40 CRC 검증 실패")
-                
-                # 원시 데이터를 실제 값으로 변환
-                t_raw = (t_data[0] << 8) | t_data[1]
-                rh_raw = (rh_data[0] << 8) | rh_data[1]
-                
-                # 데이터시트의 변환 공식 적용
-                temperature = -45 + 175 * (t_raw / 65535.0)
-                humidity = -6 + 125 * (rh_raw / 65535.0)
-                humidity = max(0, min(100, humidity))  # 0-100% 범위 제한
-                
-                return {
-                    'temperature': temperature,
-                    'humidity': humidity
-                }
-            
-            return None
-            
-        except Exception as e:
-            print(f"❌ SHT40 데이터 읽기 실패: {e}")
-            return None
-
-
-class BH1750Sensor:
-    """BH1750 조도센서 클래스"""
-    
-    def __init__(self, bus, address=0x23):
-        self.bus = bus
-        self.address = address
-        self.connected = False
-        
-        # 연결 테스트 및 초기화
-        self.connected = self._initialize()
-    
-    def _initialize(self):
-        """BH1750 센서 초기화"""
-        try:
-            # 전원 켜기
-            self.bus.write_byte(self.address, 0x01)
-            time.sleep(0.01)
-            
-            # 리셋
-            self.bus.write_byte(self.address, 0x07)
-            time.sleep(0.01)
-            
-            # 연속 측정 모드 설정
-            self.bus.write_byte(self.address, 0x10)  # 1 lux 해상도
-            time.sleep(0.12)  # 측정 시간 대기
-            
-            print(f"✅ BH1750 센서 초기화 완료 (주소: 0x{self.address:02X})")
-            return True
-            
-        except Exception as e:
-            print(f"❌ BH1750 초기화 실패: {e}")
-            return False
-    
-    def read_data(self):
-        """조도 데이터 읽기"""
-        if not self.connected:
-            return None
-        
-        try:
-            # 데이터 읽기 (2바이트)
-            data = self.bus.read_i2c_block_data(self.address, 0x10, 2)
-            
-            if len(data) >= 2:
-                # 조도값 계산
-                lux = ((data[0] << 8) | data[1]) / 1.2
-                return max(0.0, min(100000.0, lux))  # 센서 범위 제한
-            
-            return None
-            
-        except Exception as e:
-            print(f"❌ BH1750 데이터 읽기 실패: {e}")
-            return None
 
 
 class SensorManager:
@@ -486,8 +149,11 @@ class SensorManager:
         found_sensors = []
         sensor_count = 0
         
+        # 로그에서 확인된 바와 같이 0x77 주소만 사용 중
+        working_addresses = [0x77]  # 0x76은 Remote I/O error 발생하므로 제외
+        
         for bus_num, bus in self.buses.items():
-            for addr in [0x76, 0x77]:  # BME688 일반적인 주소
+            for addr in working_addresses:
                 try:
                     bme688 = BME688Sensor(bus, addr)
                     if bme688.connected:
@@ -503,8 +169,8 @@ class SensorManager:
                         found_sensors.append(sensor_info)
                         print(f"✅ BME688 센서 발견 (버스 {bus_num}, 주소 0x{addr:02X}) - {alias}")
                 except Exception as e:
-                    # 해당 주소에 센서가 없음 (정상적인 동작)
-                    pass
+                    print(f"⚠️ BME688 초기화 실패 (버스 {bus_num}, 주소 0x{addr:02X}): {e}")
+                    continue
         
         if not found_sensors:
             print("❌ BME688 센서를 찾을 수 없습니다")
@@ -768,25 +434,33 @@ class SensorManager:
         
         # SPS30 데이터 읽기 (미세먼지)
         if self.sps30 and self.sps30.connected:
-            print(f"🔍 SPS30 데이터 읽기 시도...")
-            sps30_data = self.sps30.read_data()
-            if sps30_data:
-                print(f"✅ SPS30 데이터 읽기 성공: PM2.5={sps30_data['pm25']:.1f}μg/m³")
-                result['pm1'] = sps30_data['pm1']
-                result['pm25'] = sps30_data['pm25']
-                result['pm4'] = sps30_data['pm4']
-                result['pm10'] = sps30_data['pm10']
-                # 성공 시 오류 카운트 리셋
-                if 'sps30' in self.sensor_error_count:
-                    self.sensor_error_count['sps30'] = 0
-            else:
-                print(f"❌ SPS30 데이터 읽기 실패")
+            print(f"🔍 SPS30 데이터 읽기 시도... (연결상태: {self.sps30.connected})")
+            try:
+                sps30_data = self.sps30.read_data()
+                if sps30_data:
+                    print(f"✅ SPS30 데이터 읽기 성공: PM1.0={sps30_data['pm1']:.1f}, PM2.5={sps30_data['pm25']:.1f}, PM4.0={sps30_data['pm4']:.1f}, PM10={sps30_data['pm10']:.1f}μg/m³")
+                    result['pm1'] = sps30_data['pm1']
+                    result['pm25'] = sps30_data['pm25']
+                    result['pm4'] = sps30_data['pm4']
+                    result['pm10'] = sps30_data['pm10']
+                    # 센서 상태 업데이트
+                    result['sensor_status']['sps30'] = True
+                    # 성공 시 오류 카운트 리셋
+                    if 'sps30' in self.sensor_error_count:
+                        self.sensor_error_count['sps30'] = 0
+                else:
+                    print(f"❌ SPS30 데이터 읽기 실패 - read_data() 반환값이 None")
+                    self._handle_sensor_error('sps30')
+            except Exception as e:
+                print(f"❌ SPS30 데이터 읽기 예외 발생: {e}")
                 self._handle_sensor_error('sps30')
         else:
             if self.sps30:
                 print(f"⚠️ SPS30 객체 존재하지만 연결 상태: {self.sps30.connected}")
             else:
                 print(f"❌ SPS30 객체가 None입니다")
+            # 센서 상태를 False로 명시적 설정
+            result['sensor_status']['sps30'] = False
         
         return result
     
@@ -914,10 +588,35 @@ class SensorManager:
         old_config = self.last_sensor_config.copy()
         
         # 모든 센서 재검색
-        self.sht40 = self._find_sht40()
-        self.bme688 = self._find_bme688()
-        self.bh1750 = self._find_bh1750()
-        self.sdp810 = self._find_sdp810()
+        self.sht40_sensors = self._find_all_sht40()
+        if self.sht40_sensors:
+            self.sht40 = self.sht40_sensors[0]['sensor']
+        else:
+            self.sht40 = None
+            
+        self.bme688_sensors = self._find_all_bme688()
+        if self.bme688_sensors:
+            self.bme688 = self.bme688_sensors[0]['sensor']
+        else:
+            self.bme688 = None
+            
+        self.bh1750_sensors = self._find_all_bh1750()
+        if self.bh1750_sensors:
+            self.bh1750 = self.bh1750_sensors[0]['sensor']
+        else:
+            self.bh1750 = None
+            
+        self.sdp810_sensors = self._find_all_sdp810()
+        if self.sdp810_sensors:
+            self.sdp810 = self.sdp810_sensors[0]['sensor']
+        else:
+            self.sdp810 = None
+            
+        self.sps30_sensors = self._find_all_sps30()
+        if self.sps30_sensors:
+            self.sps30 = self.sps30_sensors[0]['sensor']
+        else:
+            self.sps30 = None
         
         # 오류 카운트 리셋
         self.sensor_error_count.clear()
