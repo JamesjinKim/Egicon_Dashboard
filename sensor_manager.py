@@ -503,7 +503,8 @@ class SensorManager:
                         found_sensors.append(sensor_info)
                         print(f"✅ BME688 센서 발견 (버스 {bus_num}, 주소 0x{addr:02X}) - {alias}")
                 except Exception as e:
-                    continue
+                    # 해당 주소에 센서가 없음 (정상적인 동작)
+                    pass
         
         if not found_sensors:
             print("❌ BME688 센서를 찾을 수 없습니다")
@@ -767,8 +768,10 @@ class SensorManager:
         
         # SPS30 데이터 읽기 (미세먼지)
         if self.sps30 and self.sps30.connected:
+            print(f"🔍 SPS30 데이터 읽기 시도...")
             sps30_data = self.sps30.read_data()
             if sps30_data:
+                print(f"✅ SPS30 데이터 읽기 성공: PM2.5={sps30_data['pm25']:.1f}μg/m³")
                 result['pm1'] = sps30_data['pm1']
                 result['pm25'] = sps30_data['pm25']
                 result['pm4'] = sps30_data['pm4']
@@ -777,7 +780,13 @@ class SensorManager:
                 if 'sps30' in self.sensor_error_count:
                     self.sensor_error_count['sps30'] = 0
             else:
+                print(f"❌ SPS30 데이터 읽기 실패")
                 self._handle_sensor_error('sps30')
+        else:
+            if self.sps30:
+                print(f"⚠️ SPS30 객체 존재하지만 연결 상태: {self.sps30.connected}")
+            else:
+                print(f"❌ SPS30 객체가 None입니다")
         
         return result
     

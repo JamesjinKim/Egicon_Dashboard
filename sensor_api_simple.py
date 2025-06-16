@@ -522,6 +522,30 @@ def rescan_sensors():
             'message': f'센서 재검색 실패: {e}'
         }), 500
 
+@app.route('/api/debug/sps30', methods=['GET'])
+def debug_sps30():
+    """SPS30 디버깅 정보"""
+    global sensor_manager
+    
+    if not sensor_manager:
+        return jsonify({'error': 'sensor_manager가 없습니다'})
+    
+    debug_info = {
+        'sps30_object_exists': sensor_manager.sps30 is not None,
+        'sps30_connected': sensor_manager.sps30.connected if sensor_manager.sps30 else False,
+        'sps30_sensors_count': len(sensor_manager.sps30_sensors),
+        'sensor_status': sensor_manager.get_sensor_status()
+    }
+    
+    if sensor_manager.sps30:
+        try:
+            test_data = sensor_manager.sps30.read_data()
+            debug_info['test_read_data'] = test_data
+        except Exception as e:
+            debug_info['test_read_error'] = str(e)
+    
+    return jsonify(debug_info)
+
 @app.errorhandler(404)
 def not_found(error):
     return jsonify({'error': 'API 엔드포인트를 찾을 수 없음'}), 404
