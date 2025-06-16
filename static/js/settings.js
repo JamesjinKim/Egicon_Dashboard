@@ -219,6 +219,12 @@ async function loadSensors() {
         }
         
         const sensors = await response.json();
+        
+        // API 응답 검증
+        if (!Array.isArray(sensors)) {
+            throw new Error('잘못된 센서 데이터 형식');
+        }
+        
         displaySensors(sensors);
         updateSensorStats(sensors);
         

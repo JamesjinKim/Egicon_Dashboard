@@ -445,6 +445,7 @@ function updateAllSensorDisplays(data) {
             updateSensorSection('sdp810', data);
             updateSensorSection('bh1750', data);
             updateVirtualSensors(data);
+            updateSPS30Section(data);
         } else {
             // 데이터가 없을 경우 모든 센서를 비연결 상태로 설정
             setAllSensorsDisconnected();
@@ -555,6 +556,69 @@ function updateVirtualSensors(data) {
             : '0.00';
         vibrationElement.innerHTML = vibrationValue + '<span class="widget-unit">g</span>';
         vibrationElement.className = vibrationElement.className.replace(/sensor-\w+/g, '') + ' sensor-virtual';
+    }
+}
+
+// SPS30 센서 섹션 업데이트
+function updateSPS30Section(data) {
+    const statusElement = document.getElementById(SENSOR_WIDGETS.sps30.status);
+    const sectionElement = document.getElementById('sps30-section');
+    
+    // 센서 상태 확인
+    const isConnected = data.sensor_status && data.sensor_status.sps30;
+    const hasData = data.pm1 !== undefined && data.pm1 !== null;
+    
+    if (statusElement) {
+        if (isConnected && hasData) {
+            statusElement.textContent = '연결됨';
+            statusElement.className = 'sensor-status-indicator connected';
+        } else if (isConnected && !hasData) {
+            statusElement.textContent = '데이터 없음';
+            statusElement.className = 'sensor-status-indicator warning';
+        } else {
+            statusElement.textContent = '연결 안됨';
+            statusElement.className = 'sensor-status-indicator disconnected';
+        }
+    }
+    
+    if (sectionElement) {
+        sectionElement.classList.remove('hidden');
+    }
+    
+    // SPS30 위젯 데이터 업데이트
+    if (isConnected && hasData) {
+        updateSPS30Display(data);
+        addSensorLog(`미세먼지 데이터 업데이트: PM2.5=${data.pm25.toFixed(1)}μg/m³`, 'success', 'SPS30');
+    } else {
+        // 기본값 설정
+        setDefaultSPS30Values();
+        if (isConnected && !hasData) {
+            addSensorLog('센서 연결됨, 데이터 대기 중', 'warning', 'SPS30');
+        } else {
+            addSensorLog('센서 미연결', 'error', 'SPS30');
+        }
+    }
+}
+
+// SPS30 기본값 설정
+function setDefaultSPS30Values() {
+    const widgets = SENSOR_WIDGETS.sps30;
+    const units = {
+        pm1: 'μg/m³',
+        pm25: 'μg/m³',
+        pm4: 'μg/m³',
+        pm10: 'μg/m³',
+        airquality: '/100'
+    };
+    
+    for (const [dataType, widgetId] of Object.entries(widgets)) {
+        if (dataType !== 'status') {
+            const element = document.getElementById(widgetId);
+            if (element) {
+                element.innerHTML = '센서 없음<span class="widget-unit">' + units[dataType] + '</span>';
+                element.className = element.className.replace(/sensor-\w+/g, '') + ' sensor-disconnected';
+            }
+        }
     }
 }
 

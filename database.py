@@ -133,14 +133,24 @@ class SensorDatabase:
                     # 이미 존재하는 주소는 무시
                     pass
             
-            # 시리얼 센서들 삽입
+            # 시리얼 센서들 삽입 (중복 체크 개선)
             for address, name, sensor_type, description, voltage, comm_type, port_info in serial_sensors:
                 try:
+                    # 이미 존재하는지 확인
                     cursor.execute('''
-                        INSERT OR IGNORE INTO sensors 
-                        (address, name, type, description, voltage, communication_type, port_info, is_default)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, 1)
-                    ''', (address, name, sensor_type, description, voltage, comm_type, port_info))
+                        SELECT COUNT(*) FROM sensors 
+                        WHERE name = ? AND communication_type = ? AND is_default = 1
+                    ''', (name, comm_type))
+                    
+                    if cursor.fetchone()[0] == 0:
+                        cursor.execute('''
+                            INSERT INTO sensors 
+                            (address, name, type, description, voltage, communication_type, port_info, is_default)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+                        ''', (address, name, sensor_type, description, voltage, comm_type, port_info))
+                        print(f"✅ 기본 센서 추가: {name} ({comm_type})")
+                    else:
+                        print(f"ℹ️ 기본 센서 이미 존재: {name} ({comm_type})")
                 except sqlite3.IntegrityError:
                     # 이미 존재하는 센서는 무시
                     pass

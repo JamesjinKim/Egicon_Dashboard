@@ -83,6 +83,11 @@ def get_current_data():
                 'gas_resistance': sensor_data['gas_resistance'],
                 'air_quality': sensor_data['air_quality'],
                 'absolute_pressure': sensor_data['absolute_pressure'],
+                # SPS30 미세먼지 데이터 추가
+                'pm1': sensor_data.get('pm1'),
+                'pm25': sensor_data.get('pm25'),
+                'pm4': sensor_data.get('pm4'),
+                'pm10': sensor_data.get('pm10'),
                 'sensor_status': sensor_data['sensor_status']
             })
         else:
@@ -98,11 +103,17 @@ def get_current_data():
                 'gas_resistance': None,
                 'air_quality': None,
                 'absolute_pressure': None,
+                # SPS30 미세먼지 데이터 추가
+                'pm1': None,
+                'pm25': None,
+                'pm4': None,
+                'pm10': None,
                 'sensor_status': {
                     'bme688': False,
                     'bh1750': False,
                     'sht40': False,
-                    'sdp810': False
+                    'sdp810': False,
+                    'sps30': False
                 }
             })
         
@@ -120,11 +131,17 @@ def get_current_data():
             'gas_resistance': None,
             'air_quality': None,
             'absolute_pressure': None,
+            # SPS30 미세먼지 데이터 추가
+            'pm1': None,
+            'pm25': None,
+            'pm4': None,
+            'pm10': None,
             'sensor_status': {
                 'bme688': False,
                 'bh1750': False,
                 'sht40': False,
-                'sdp810': False
+                'sdp810': False,
+                'sps30': False
             },
             'error': str(e)
         })
@@ -442,6 +459,42 @@ def scan_all_sensors():
             'message': f'통합 센서 검색 실패: {e}',
             'i2c_devices': [],
             'uart_devices': []
+        }), 500
+
+@app.route('/api/sensors/cleanup-duplicates', methods=['POST'])
+def cleanup_duplicate_sensors():
+    """중복 센서 정리"""
+    global sensor_db
+    
+    if not sensor_db:
+        return jsonify({'success': False, 'message': '데이터베이스가 초기화되지 않음'}), 500
+    
+    try:
+        with sensor_db.get_connection() as conn:
+            cursor = conn.cursor()
+            
+            # SPS30 중복 제거 (가장 최근 것만 남기고 삭제)
+            cursor.execute('''
+                DELETE FROM sensors 
+                WHERE name = 'SPS30' AND communication_type = 'UART' AND is_default = 1
+                AND id NOT IN (
+                    SELECT MAX(id) FROM sensors 
+                    WHERE name = 'SPS30' AND communication_type = 'UART' AND is_default = 1
+                )
+            ''')
+            
+            deleted_count = cursor.rowcount
+            conn.commit()
+            
+            return jsonify({
+                'success': True,
+                'message': f'{deleted_count}개의 중복 센서가 정리되었습니다'
+            })
+    
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'중복 센서 정리 실패: {e}'
         }), 500
 
 @app.route('/api/sensors/rescan', methods=['POST'])
