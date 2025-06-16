@@ -231,17 +231,35 @@ class SPS30Sensor:
                             print(f"⚠️ SPS30 리셋 실패: {e}")
                             return None
                     
-                    # 데이터 읽기 시도
+                    # 데이터 읽기 시도 - 다양한 방법으로 테스트
+                    print(f"🔍 SPS30 센서에서 다양한 방법으로 데이터 읽기 시도...")
+                    
+                    # 방법 1: read_measured_value() - 현재 사용 중
                     raw_data = device.read_measured_value()
+                    print(f"📊 read_measured_value() 결과: {type(raw_data)} - {raw_data}")
+                    
+                    # 방법 2: 다른 가능한 메서드들 테스트
+                    try:
+                        # SPS30 라이브러리에서 제공하는 다른 읽기 방법들을 시도
+                        if hasattr(device, 'read_measured_values'):
+                            alt_data = device.read_measured_values()
+                            print(f"📊 read_measured_values() 결과: {type(alt_data)} - {alt_data}")
+                        
+                        if hasattr(device, 'get_measured_values'):
+                            alt_data2 = device.get_measured_values()
+                            print(f"📊 get_measured_values() 결과: {type(alt_data2)} - {alt_data2}")
+                            
+                    except Exception as e:
+                        print(f"⚠️ 대체 방법 테스트 중 오류: {e}")
                     
                     # 데이터 유효성 검사
-                    if not raw_data or len(raw_data) < 2:
+                    if not raw_data or (isinstance(raw_data, (list, tuple)) and len(raw_data) < 2):
                         if attempt < max_retries:
-                            continue  # 다음 시도로
+                            continue
                         else:
                             return None
                     
-                    # 정상 작동하는 코드의 안전한 숫자 변환 함수 사용
+                    # 샘플 코드처럼 간단한 방법으로 파싱 시도
                     def safe_float(value):
                         try:
                             if isinstance(value, (int, float)):
@@ -249,7 +267,7 @@ class SPS30Sensor:
                             elif isinstance(value, str):
                                 return float(value)
                             elif isinstance(value, tuple) and len(value) > 0:
-                                return float(value[0])  # 튜플의 첫 번째 값 사용
+                                return float(value[0])
                             elif hasattr(value, '__float__'):
                                 return float(value)
                             else:
@@ -257,31 +275,61 @@ class SPS30Sensor:
                         except Exception:
                             return 0.0
                     
-                    # SPS30 데이터 구조 분석 및 파싱
-                    # raw_data는 일반적으로 ((질량농도), (개수농도), 평균입자크기) 형태
-                    print(f"🔍 SPS30 데이터 구조 분석: {type(raw_data)} - {raw_data}")
+                    # 다양한 데이터 구조 처리
+                    print(f"🔍 SPS30 데이터 구조 상세 분석:")
+                    print(f"   타입: {type(raw_data)}")
+                    print(f"   길이: {len(raw_data) if hasattr(raw_data, '__len__') else 'N/A'}")
+                    print(f"   내용: {raw_data}")
                     
-                    # 첫 번째 튜플이 질량 농도 데이터 (μg/m³)
-                    if isinstance(raw_data[0], tuple) and len(raw_data[0]) >= 4:
-                        mass_concentrations = raw_data[0]
-                        pm1_val = safe_float(mass_concentrations[0])    # PM1.0
-                        pm25_val = safe_float(mass_concentrations[1])   # PM2.5  
-                        pm4_val = safe_float(mass_concentrations[2])    # PM4.0
-                        pm10_val = safe_float(mass_concentrations[3])   # PM10
-                        
-                        print(f"✅ SPS30 질량농도 데이터: PM1.0={pm1_val:.1f} PM2.5={pm25_val:.1f} PM4.0={pm4_val:.1f} PM10={pm10_val:.1f} μg/m³")
+                    # 각 요소별 상세 분석
+                    if isinstance(raw_data, (list, tuple)) and len(raw_data) >= 3:
+                        for i, element in enumerate(raw_data):
+                            print(f"   [{i}]: {type(element)} = {element}")
+                    
+                    # SPS30 공식 데이터시트에 따른 올바른 파싱
+                    # 데이터 구조: ((질량농도), (개수농도), 평균입자크기)
+                    # 질량농도: PM1.0, PM2.5, PM4.0, PM10 [μg/m³] <- 이것이 우리가 원하는 값!
+                    # 개수농도: PM0.5, PM1.0, PM2.5, PM4.0, PM10 [#/cm³]
+                    
+                    if isinstance(raw_data, (list, tuple)) and len(raw_data) >= 3:
+                        if isinstance(raw_data[0], tuple) and isinstance(raw_data[1], tuple):
+                            # 올바른 SPS30 데이터 구조 확인
+                            mass_concentrations = raw_data[0]      # 질량농도 튜플 (μg/m³)
+                            number_concentrations = raw_data[1]    # 개수농도 튜플 (#/cm³)
+                            typical_particle_size = raw_data[2]    # 평균 입자 크기 (μm)
+                            
+                            print(f"📊 SPS30 데이터시트 기준 파싱:")
+                            print(f"   질량농도 [μg/m³]: {mass_concentrations}")
+                            print(f"   개수농도 [#/cm³]: {number_concentrations}")
+                            print(f"   평균입자크기 [μm]: {typical_particle_size}")
+                            
+                            if len(mass_concentrations) >= 4:
+                                # 데이터시트에 따른 정확한 질량농도 파싱
+                                pm1_val = safe_float(mass_concentrations[0])    # PM1.0 [μg/m³]
+                                pm25_val = safe_float(mass_concentrations[1])   # PM2.5 [μg/m³]
+                                pm4_val = safe_float(mass_concentrations[2])    # PM4.0 [μg/m³]
+                                pm10_val = safe_float(mass_concentrations[3])   # PM10 [μg/m³]
+                                
+                                print(f"✅ SPS30 질량농도 (정확한 PM 값): PM1.0={pm1_val:.1f} PM2.5={pm25_val:.1f} PM4.0={pm4_val:.1f} PM10={pm10_val:.1f} μg/m³")
+                                
+                                # 추가 검증: 개수농도도 출력해서 비교
+                                if len(number_concentrations) >= 5:
+                                    pm05_num = safe_float(number_concentrations[0])  # PM0.5 개수농도
+                                    pm1_num = safe_float(number_concentrations[1])   # PM1.0 개수농도
+                                    pm25_num = safe_float(number_concentrations[2])  # PM2.5 개수농도
+                                    pm4_num = safe_float(number_concentrations[3])   # PM4.0 개수농도
+                                    pm10_num = safe_float(number_concentrations[4])  # PM10 개수농도
+                                    
+                                    print(f"📊 개수농도 참고값 [#/cm³]: PM0.5={pm05_num:.0f} PM1.0={pm1_num:.0f} PM2.5={pm25_num:.0f} PM4.0={pm4_num:.0f} PM10={pm10_num:.0f}")
+                            else:
+                                print(f"❌ 질량농도 데이터 길이 부족: {len(mass_concentrations)}")
+                                return None
+                        else:
+                            print(f"❌ 예상된 튜플 구조가 아님: raw_data[0]={type(raw_data[0])}, raw_data[1]={type(raw_data[1])}")
+                            return None
                     else:
-                        # 단순 배열 형태인 경우 (이전 방식)
-                        pm1_val = safe_float(raw_data[0])
-                        pm25_val = safe_float(raw_data[1])
-                        pm10_val = safe_float(raw_data[2])
-                        pm4_val = 0.0  # 기본값
-                        
-                        if len(raw_data) >= 4:
-                            pm4_val = safe_float(raw_data[2])
-                            pm10_val = safe_float(raw_data[3])
-                        
-                        print(f"✅ SPS30 단순배열 데이터: PM1.0={pm1_val:.1f} PM2.5={pm25_val:.1f} PM4.0={pm4_val:.1f} PM10={pm10_val:.1f} μg/m³")
+                        print(f"❌ 예상치 못한 데이터 구조: 타입={type(raw_data)}, 길이={len(raw_data) if hasattr(raw_data, '__len__') else 'N/A'}")
+                        return None
                     
                     measurement = {
                         'pm1': pm1_val,
