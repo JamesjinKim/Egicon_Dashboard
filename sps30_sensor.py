@@ -161,86 +161,118 @@ class SPS30Sensor:
         if not self.connected or not SPS30_AVAILABLE:
             return None
         
-        try:
-            with ShdlcSerialPort(port=self.port_path, baudrate=115200) as port:
-                device = Sps30ShdlcDevice(ShdlcConnection(port))
-                
-                # 첫 번째 시도: 데이터 읽기
-                raw_data = device.read_measured_value()
-                print(f"🔍 SPS30 원시 데이터: {raw_data} (길이: {len(raw_data) if raw_data else 0})")
-                
-                if not raw_data or len(raw_data) < 3:
-                    print(f"⚠️ SPS30 데이터 부족: {len(raw_data) if raw_data else 0}개")
-                    # 정상 동작 코드처럼 센서 리셋 후 재초기화
-                    try:
-                        print("🔄 SPS30 센서 리셋 및 재초기화...")
-                        device.device_reset()
-                        print("✅ SPS30 센서 리셋 완료")
-                        time.sleep(2)  # 리셋 후 대기
-                        
-                        # 측정 시작
-                        device.start_measurement()
-                        print("✅ SPS30 측정 시작")
-                        time.sleep(5)  # 충분한 안정화 대기 (정상 코드와 동일)
-                        
-                        # 데이터 재시도
-                        raw_data = device.read_measured_value()
-                        print(f"🔍 SPS30 재초기화 후 데이터: {raw_data} (길이: {len(raw_data) if raw_data else 0})")
-                        
-                    except Exception as e:
-                        print(f"⚠️ SPS30 센서 리셋 실패: {e}")
+        max_retries = 2  # 최대 재시도 횟수
+        
+        for attempt in range(max_retries + 1):
+            try:
+                with ShdlcSerialPort(port=self.port_path, baudrate=115200) as port:
+                    device = Sps30ShdlcDevice(ShdlcConnection(port))
                     
+                    # 첫 번째 시도가 아닌 경우, 센서 상태 확인 및 초기화
+                    if attempt > 0:
+                        print(f"🔄 SPS30 재시도 {attempt}/{max_retries}")
+                        try:
+                            # 측정 중지 (상태 초기화)
+                            try:
+                                device.stop_measurement()
+                                time.sleep(1)
+                            except Exception:
+                                pass  # 이미 중지된 경우 무시
+                            
+                            # 센서 리셋
+                            device.device_reset()
+                            print("✅ SPS30 센서 리셋 완료")
+                            time.sleep(3)  # 리셋 후 충분한 대기
+                            
+                            # 측정 시작
+                            device.start_measurement()
+                            print("✅ SPS30 측정 재시작")
+                            
+                            # 안정화 대기 및 상태 확인
+                            for wait_time in range(8):  # 8초 대기하면서 상태 확인
+                                time.sleep(1)
+                                try:
+                                    ready = device.read_data_ready()
+                                    if ready:
+                                        print(f"✅ SPS30 측정 준비 완료 ({wait_time + 1}초 후)")
+                                        break
+                                except Exception:
+                                    pass
+                            else:
+                                print("⚠️ SPS30 측정 준비 상태 확인 불가")
+                            
+                        except Exception as reset_error:
+                            print(f"⚠️ SPS30 리셋 중 오류: {reset_error}")
+                            if attempt == max_retries:
+                                return None
+                            continue
+                    
+                    # 데이터 읽기 시도
+                    raw_data = device.read_measured_value()
+                    print(f"🔍 SPS30 원시 데이터 (시도 {attempt + 1}): {raw_data} (길이: {len(raw_data) if raw_data else 0})")
+                    
+                    # 데이터 유효성 검사
                     if not raw_data or len(raw_data) < 3:
-                        print("❌ SPS30 센서 리셋 후에도 데이터 없음")
-                        return None
-                
-                # 정상 작동하는 코드의 안전한 숫자 변환 함수 사용
-                def safe_float(value):
-                    try:
-                        if isinstance(value, (int, float)):
-                            return float(value)
-                        elif isinstance(value, str):
-                            return float(value)
-                        elif isinstance(value, tuple) and len(value) > 0:
-                            return float(value[0])  # 튜플의 첫 번째 값 사용
-                        elif hasattr(value, '__float__'):
-                            return float(value)
+                        print(f"⚠️ SPS30 데이터 부족: {len(raw_data) if raw_data else 0}개")
+                        if attempt < max_retries:
+                            continue  # 다음 시도로
                         else:
+                            print("❌ SPS30 모든 시도 실패")
+                            return None
+                    
+                    # 정상 작동하는 코드의 안전한 숫자 변환 함수 사용
+                    def safe_float(value):
+                        try:
+                            if isinstance(value, (int, float)):
+                                return float(value)
+                            elif isinstance(value, str):
+                                return float(value)
+                            elif isinstance(value, tuple) and len(value) > 0:
+                                return float(value[0])  # 튜플의 첫 번째 값 사용
+                            elif hasattr(value, '__float__'):
+                                return float(value)
+                            else:
+                                return 0.0
+                        except Exception:
                             return 0.0
-                    except Exception:
-                        return 0.0
-                
-                # 데이터 파싱 (정상 동작 코드와 동일한 방식)
-                pm1_val = safe_float(raw_data[0])
-                pm25_val = safe_float(raw_data[1])
-                pm10_val = safe_float(raw_data[2])
-                pm4_val = 0.0  # 기본값
-                
-                measurement = {
-                    'pm1': pm1_val,
-                    'pm25': pm25_val,
-                    'pm4': pm4_val,  # 3개 데이터인 경우 PM4.0 없음
-                    'pm10': pm10_val,
-                    'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                }
-                
-                # 4개 이상 데이터가 있는 경우 PM4.0 포함
-                if len(raw_data) >= 4:
-                    pm4_val = safe_float(raw_data[2])
-                    pm10_val = safe_float(raw_data[3])
-                    measurement['pm4'] = pm4_val
-                    measurement['pm10'] = pm10_val
-                    print(f"✅ SPS30 데이터(4개): PM1.0={pm1_val:.1f} PM2.5={pm25_val:.1f} PM4.0={pm4_val:.1f} PM10={pm10_val:.1f}")
-                else:
-                    # 3개 데이터: PM1.0, PM2.5, PM10
-                    print(f"✅ SPS30 데이터(3개): PM1.0={pm1_val:.1f} PM2.5={pm25_val:.1f} PM10={pm10_val:.1f}")
-                
-                self.last_measurement = measurement
-                return measurement
-                
-        except Exception as e:
-            print(f"❌ SPS30 데이터 읽기 실패: {e}")
-            return None
+                    
+                    # 데이터 파싱 (정상 동작 코드와 동일한 방식)
+                    pm1_val = safe_float(raw_data[0])
+                    pm25_val = safe_float(raw_data[1])
+                    pm10_val = safe_float(raw_data[2])
+                    pm4_val = 0.0  # 기본값
+                    
+                    measurement = {
+                        'pm1': pm1_val,
+                        'pm25': pm25_val,
+                        'pm4': pm4_val,  # 3개 데이터인 경우 PM4.0 없음
+                        'pm10': pm10_val,
+                        'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    }
+                    
+                    # 4개 이상 데이터가 있는 경우 PM4.0 포함
+                    if len(raw_data) >= 4:
+                        pm4_val = safe_float(raw_data[2])
+                        pm10_val = safe_float(raw_data[3])
+                        measurement['pm4'] = pm4_val
+                        measurement['pm10'] = pm10_val
+                        print(f"✅ SPS30 데이터(4개): PM1.0={pm1_val:.1f} PM2.5={pm25_val:.1f} PM4.0={pm4_val:.1f} PM10={pm10_val:.1f}")
+                    else:
+                        # 3개 데이터: PM1.0, PM2.5, PM10
+                        print(f"✅ SPS30 데이터(3개): PM1.0={pm1_val:.1f} PM2.5={pm25_val:.1f} PM10={pm10_val:.1f}")
+                    
+                    self.last_measurement = measurement
+                    return measurement  # 성공 시 즉시 반환
+                    
+            except Exception as e:
+                print(f"❌ SPS30 데이터 읽기 예외 (시도 {attempt + 1}): {e}")
+                if attempt == max_retries:
+                    return None
+                # continue로 다음 시도
+        
+        # 모든 시도 실패
+        print("❌ SPS30 센서 모든 재시도 실패")
+        return None
     
     def get_air_quality_index(self, pm25_value: float) -> Tuple[str, int]:
         """
@@ -322,6 +354,22 @@ class SPS30Sensor:
                 
         except Exception as e:
             print(f"❌ SPS30 측정 중지 실패: {e}")
+            return False
+    
+    def get_measurement_status(self) -> bool:
+        """측정 상태 확인"""
+        if not self.connected or not SPS30_AVAILABLE:
+            return False
+            
+        try:
+            with ShdlcSerialPort(port=self.port_path, baudrate=115200) as port:
+                device = Sps30ShdlcDevice(ShdlcConnection(port))
+                # 측정 상태 확인 (read_data_ready 사용)
+                ready = device.read_data_ready()
+                return ready
+                
+        except Exception as e:
+            print(f"❌ SPS30 측정 상태 확인 실패: {e}")
             return False
     
     def close(self):
