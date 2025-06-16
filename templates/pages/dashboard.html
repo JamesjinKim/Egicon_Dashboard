@@ -182,6 +182,92 @@
             </div>
         </div>
 
+        <!-- SPS30 미세먼지센서 섹션 -->
+        <div class="sensor-section" id="sps30-section">
+            <div class="sensor-section-header">
+                <h3><i class="fas fa-smog"></i> SPS30 미세먼지센서</h3>
+                <div class="sensor-status-indicator" id="sps30-status">연결 대기중</div>
+            </div>
+            <div class="sensor-widgets-row">
+                <div class="sensor-widget sps30-pm1">
+                    <div class="widget-color-bar"></div>
+                    <div class="widget-content">
+                        <div class="widget-icon">
+                            <i class="fas fa-leaf"></i>
+                        </div>
+                        <div class="widget-title">PM1.0</div>
+                        <div class="widget-value" id="sps30-pm1-value">--<span class="widget-unit">μg/m³</span></div>
+                    </div>
+                </div>
+                <div class="sensor-widget sps30-pm25">
+                    <div class="widget-color-bar"></div>
+                    <div class="widget-content">
+                        <div class="widget-icon">
+                            <i class="fas fa-wind"></i>
+                        </div>
+                        <div class="widget-title">PM2.5</div>
+                        <div class="widget-value" id="sps30-pm25-value">--<span class="widget-unit">μg/m³</span></div>
+                    </div>
+                </div>
+                <div class="sensor-widget sps30-pm4">
+                    <div class="widget-color-bar"></div>
+                    <div class="widget-content">
+                        <div class="widget-icon">
+                            <i class="fas fa-cloud"></i>
+                        </div>
+                        <div class="widget-title">PM4.0</div>
+                        <div class="widget-value" id="sps30-pm4-value">--<span class="widget-unit">μg/m³</span></div>
+                    </div>
+                </div>
+                <div class="sensor-widget sps30-pm10">
+                    <div class="widget-color-bar"></div>
+                    <div class="widget-content">
+                        <div class="widget-icon">
+                            <i class="fas fa-smog"></i>
+                        </div>
+                        <div class="widget-title">PM10</div>
+                        <div class="widget-value" id="sps30-pm10-value">--<span class="widget-unit">μg/m³</span></div>
+                    </div>
+                </div>
+                <div class="sensor-widget sps30-airquality">
+                    <div class="widget-color-bar"></div>
+                    <div class="widget-content">
+                        <div class="widget-icon">
+                            <i class="fas fa-lungs"></i>
+                        </div>
+                        <div class="widget-title">공기질 지수</div>
+                        <div class="widget-value" id="sps30-airquality-value">--<span class="widget-unit">/100</span></div>
+                    </div>
+                </div>
+            </div>
+            <div class="sensor-charts-row">
+                <div class="chart-card">
+                    <div class="chart-header">PM1.0</div>
+                    <div class="chart-container">
+                        <canvas id="sps30-pm1-chart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-header">PM2.5</div>
+                    <div class="chart-container">
+                        <canvas id="sps30-pm25-chart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-header">PM4.0</div>
+                    <div class="chart-container">
+                        <canvas id="sps30-pm4-chart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-header">PM10</div>
+                    <div class="chart-container">
+                        <canvas id="sps30-pm10-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- 기타 센서 섹션 (진동 - 가상센서) -->
         <div class="sensor-section" id="virtual-section">
             <div class="sensor-section-header">
@@ -226,9 +312,118 @@
             </div>
         </div>
 
+        <!-- 실시간 센서 로그 섹션 -->
+        <div class="sensor-section log-section">
+            <div class="sensor-section-header">
+                <h3><i class="fas fa-terminal"></i> 실시간 센서 로그</h3>
+                <div class="log-controls">
+                    <button id="clear-log-btn" class="clear-log-btn">
+                        <i class="fas fa-trash"></i> 로그 지우기
+                    </button>
+                    <button id="pause-log-btn" class="pause-log-btn">
+                        <i class="fas fa-pause"></i> 일시정지
+                    </button>
+                </div>
+            </div>
+            <div class="log-container">
+                <div class="log-output" id="sensor-log-output">
+                    <div class="log-entry info">
+                        <span class="log-timestamp">[시작]</span>
+                        <span class="log-message">센서 로그 모니터링이 시작되었습니다.</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
     </div>
 {% endblock %}
 
 {% block scripts %}
+    <style>
+        .log-section {
+            margin-top: 20px;
+        }
+        
+        .log-controls {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .clear-log-btn, .pause-log-btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .clear-log-btn {
+            background-color: #e74c3c;
+            color: white;
+        }
+        
+        .pause-log-btn {
+            background-color: #f39c12;
+            color: white;
+        }
+        
+        .clear-log-btn:hover {
+            background-color: #c0392b;
+        }
+        
+        .pause-log-btn:hover {
+            background-color: #e67e22;
+        }
+        
+        .log-container {
+            background-color: #1e1e1e;
+            border-radius: 8px;
+            padding: 16px;
+            margin-top: 10px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .log-output {
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.4;
+        }
+        
+        .log-entry {
+            padding: 4px 0;
+            display: flex;
+            gap: 10px;
+        }
+        
+        .log-timestamp {
+            color: #7f8c8d;
+            font-weight: bold;
+            min-width: 80px;
+        }
+        
+        .log-message {
+            flex: 1;
+        }
+        
+        .log-entry.info .log-message {
+            color: #3498db;
+        }
+        
+        .log-entry.success .log-message {
+            color: #2ecc71;
+        }
+        
+        .log-entry.warning .log-message {
+            color: #f39c12;
+        }
+        
+        .log-entry.error .log-message {
+            color: #e74c3c;
+        }
+    </style>
     <script src="{{ url_for('static', filename='js/script.js') }}"></script>
 {% endblock %}

@@ -79,6 +79,8 @@ const SENSOR_UPDATE_INTERVALS = {
 
 let sensorTimers = {};
 let lastSensorData = {};
+let logPaused = false;
+let maxLogEntries = 100;
 
 // DOM이 로드되면 실행
 document.addEventListener('DOMContentLoaded', function() {
@@ -104,11 +106,15 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 센서별 차별화된 업데이트 간격
     initializeSensorScheduler();
+    
+    // 로그 관련 이벤트 리스너
+    initializeLogControls();
 });
 
 // 센서별 스케줄러 초기화
 function initializeSensorScheduler() {
     console.log('🔄 센서별 차별화된 업데이트 스케줄러 시작');
+    addSensorLog('센서별 차별화된 업데이트 스케줄러 시작', 'info');
     
     // 기존 타이머 정리
     Object.values(sensorTimers).forEach(timer => clearInterval(timer));
@@ -117,6 +123,7 @@ function initializeSensorScheduler() {
     // 센서별 독립적인 타이머 설정
     Object.entries(SENSOR_UPDATE_INTERVALS).forEach(([sensorType, interval]) => {
         console.log(`📊 ${sensorType} 센서: ${interval}ms 간격으로 업데이트`);
+        addSensorLog(`${interval}ms 간격으로 업데이트 스케줄 설정`, 'info', sensorType.toUpperCase());
         
         sensorTimers[sensorType] = setInterval(() => {
             updateSpecificSensorData(sensorType);
@@ -141,9 +148,11 @@ async function updateSpecificSensorData(sensorType) {
         
         const data = await response.json();
         updateSensorDisplay(sensorType, data);
+        addSensorLog(`데이터 업데이트 성공`, 'success', sensorType.toUpperCase());
         
     } catch (error) {
         console.warn(`⚠️ ${sensorType} 센서 데이터 업데이트 실패:`, error);
+        addSensorLog(`데이터 업데이트 실패: ${error.message}`, 'error', sensorType.toUpperCase());
         // 개별 실패해도 다른 센서에 영향 없음
     }
 }
@@ -342,6 +351,27 @@ function updateSPS30Display(data) {
         if (pm10Element) {
             pm10Element.innerHTML = `${data.pm10.toFixed(1)}<span class="widget-unit">μg/m³</span>`;
         }
+    }
+    // 공기질 지수 계산 및 표시
+    if (data.pm25 !== undefined) {
+        const airQualityElement = document.getElementById('sps30-airquality-value');
+        if (airQualityElement) {
+            const airQualityIndex = calculateAirQualityIndex(data.pm25);
+            airQualityElement.innerHTML = `${airQualityIndex}<span class="widget-unit">/100</span>`;
+        }
+    }
+}
+
+// 공기질 지수 계산 함수 (PM2.5 기준)
+function calculateAirQualityIndex(pm25Value) {
+    if (pm25Value <= 15) {
+        return Math.max(1, 100 - Math.round(pm25Value));
+    } else if (pm25Value <= 35) {
+        return Math.max(1, 85 - Math.round((pm25Value - 15) * 2));
+    } else if (pm25Value <= 75) {
+        return Math.max(1, 45 - Math.round((pm25Value - 35) * 1.5));
+    } else {
+        return Math.max(1, Math.max(1, 20 - Math.round((pm25Value - 75) * 0.5)));
     }
 }
 
@@ -574,6 +604,7 @@ function setupAllCharts(data) {
     setupSensorCharts('sdp810', ['pressure'], timeLabels, dummyHistory, data);
     setupSensorCharts('bh1750', ['light'], timeLabels, dummyHistory, data);
     setupSensorCharts('virtual', ['vibration'], timeLabels, dummyHistory, data);
+    setupSensorCharts('sps30', ['pm1', 'pm25', 'pm4', 'pm10'], timeLabels, dummyHistory, data);
     
     // 통합 차트 설정
     setupCombinedChart(timeLabels, dummyHistory);
@@ -607,7 +638,8 @@ function getMultiSensorChartConfig(sensorType, dataType, timeLabels, dummyHistor
         bme688: { temperature: '#ff9f43', humidity: '#54a0ff', pressure: '#5f27cd', airquality: '#00d2d3' },
         sdp810: { pressure: '#ff3838' },
         bh1750: { light: '#ffb142' },
-        virtual: { vibration: '#8c7ae6' }
+        virtual: { vibration: '#8c7ae6' },
+        sps30: { pm1: '#2ecc71', pm25: '#f39c12', pm4: '#e74c3c', pm10: '#9b59b6' }
     };
     
     const units = {
@@ -616,7 +648,11 @@ function getMultiSensorChartConfig(sensorType, dataType, timeLabels, dummyHistor
         pressure: sensorType === 'sdp810' ? 'Pa' : 'hPa',
         airquality: '/100',
         light: 'lux',
-        vibration: 'g'
+        vibration: 'g',
+        pm1: 'μg/m³',
+        pm25: 'μg/m³',
+        pm4: 'μg/m³',
+        pm10: 'μg/m³'
     };
     
     const labels = {
@@ -625,7 +661,11 @@ function getMultiSensorChartConfig(sensorType, dataType, timeLabels, dummyHistor
         pressure: sensorType === 'sdp810' ? '차압' : '절대압력',
         airquality: '공기질',
         light: '조도',
-        vibration: '진동'
+        vibration: '진동',
+        pm1: 'PM1.0',
+        pm25: 'PM2.5',
+        pm4: 'PM4.0',
+        pm10: 'PM10'
     };
     
     const chartType = (dataType === 'light' || dataType === 'vibration') ? 'bar' : 'line';
@@ -944,4 +984,78 @@ function formatTime(timestamp) {
 function formatDateTime(timestamp) {
     const date = new Date(timestamp);
     return date.toLocaleString();
+}
+
+// 로그 컨트롤 초기화
+function initializeLogControls() {
+    const clearLogBtn = document.getElementById('clear-log-btn');
+    const pauseLogBtn = document.getElementById('pause-log-btn');
+    
+    if (clearLogBtn) {
+        clearLogBtn.addEventListener('click', clearSensorLog);
+    }
+    
+    if (pauseLogBtn) {
+        pauseLogBtn.addEventListener('click', toggleLogPause);
+    }
+}
+
+// 센서 로그 추가
+function addSensorLog(message, type = 'info', sensorName = '') {
+    if (logPaused) return;
+    
+    const logOutput = document.getElementById('sensor-log-output');
+    if (!logOutput) return;
+    
+    const timestamp = new Date().toLocaleTimeString();
+    const logEntry = document.createElement('div');
+    logEntry.className = `log-entry ${type}`;
+    
+    const prefix = sensorName ? `[${sensorName}] ` : '';
+    logEntry.innerHTML = `
+        <span class="log-timestamp">[${timestamp}]</span>
+        <span class="log-message">${prefix}${message}</span>
+    `;
+    
+    logOutput.appendChild(logEntry);
+    
+    // 최대 로그 엔트리 수 제한
+    const entries = logOutput.querySelectorAll('.log-entry');
+    if (entries.length > maxLogEntries) {
+        entries[0].remove();
+    }
+    
+    // 자동 스크롤
+    logOutput.scrollTop = logOutput.scrollHeight;
+}
+
+// 센서 로그 지우기
+function clearSensorLog() {
+    const logOutput = document.getElementById('sensor-log-output');
+    if (logOutput) {
+        logOutput.innerHTML = `
+            <div class="log-entry info">
+                <span class="log-timestamp">[${new Date().toLocaleTimeString()}]</span>
+                <span class="log-message">로그가 지워졌습니다.</span>
+            </div>
+        `;
+    }
+}
+
+// 로그 일시정지/재개
+function toggleLogPause() {
+    const pauseLogBtn = document.getElementById('pause-log-btn');
+    if (!pauseLogBtn) return;
+    
+    logPaused = !logPaused;
+    
+    if (logPaused) {
+        pauseLogBtn.innerHTML = '<i class="fas fa-play"></i> 재개';
+        pauseLogBtn.style.backgroundColor = '#27ae60';
+        addSensorLog('로그 모니터링이 일시정지되었습니다.', 'warning');
+    } else {
+        pauseLogBtn.innerHTML = '<i class="fas fa-pause"></i> 일시정지';
+        pauseLogBtn.style.backgroundColor = '#f39c12';
+        addSensorLog('로그 모니터링이 재개되었습니다.', 'info');
+    }
 }

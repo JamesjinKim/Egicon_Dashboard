@@ -189,6 +189,8 @@ def get_sensor_status():
             'bme688': status['bme688_connected'],
             'bh1750': status['bh1750_connected'],
             'sht40': status['sht40_connected'],
+            'sdp810': status.get('sdp810_connected', False),
+            'sps30': status.get('sps30_connected', False),
             'total_sensors': status['sensor_count'],
             'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         })
@@ -198,6 +200,8 @@ def get_sensor_status():
             'bme688': False,
             'bh1750': False,
             'sht40': False,
+            'sdp810': False,
+            'sps30': False,
             'total_sensors': 0,
             'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         })
@@ -380,6 +384,64 @@ def test_i2c_device():
         return jsonify({
             'success': False,
             'message': f'디바이스 테스트 실패: {e}'
+        }), 500
+
+@app.route('/api/sensors/scan-all', methods=['POST'])
+def scan_all_sensors():
+    """통합 센서 검색 (I2C + UART)"""
+    global i2c_scanner, sensor_manager
+    
+    try:
+        results = {
+            'i2c_devices': [],
+            'uart_devices': [],
+            'success': True,
+            'message': '통합 센서 검색 완료'
+        }
+        
+        # I2C 디바이스 스캔
+        if i2c_scanner:
+            try:
+                scan_result = i2c_scanner.scan_all_buses()
+                for bus_num, devices in scan_result.get('buses', {}).items():
+                    for device in devices:
+                        sensor_info = sensor_db.get_sensor_by_address(device) if sensor_db else None
+                        results['i2c_devices'].append({
+                            'communication_type': 'I2C',
+                            'bus': bus_num,
+                            'address': f'0x{device:02X}',
+                            'sensor_name': sensor_info.get('name', 'Unknown') if sensor_info else 'Unknown',
+                            'sensor_type': sensor_info.get('type', '미등록') if sensor_info else '미등록',
+                            'status': 'Connected'
+                        })
+            except Exception as e:
+                print(f"I2C 스캔 오류: {e}")
+        
+        # UART 디바이스 검색 (SPS30)
+        if sensor_manager:
+            try:
+                from sps30_sensor import SPS30Sensor
+                port_path, count = SPS30Sensor.find_sps30()
+                if port_path and count > 0:
+                    results['uart_devices'].append({
+                        'communication_type': 'UART',
+                        'port': port_path,
+                        'address': 'N/A',
+                        'sensor_name': 'SPS30',
+                        'sensor_type': '미세먼지센서',
+                        'status': 'Connected'
+                    })
+            except Exception as e:
+                print(f"UART 스캔 오류: {e}")
+        
+        return jsonify(results)
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'통합 센서 검색 실패: {e}',
+            'i2c_devices': [],
+            'uart_devices': []
         }), 500
 
 @app.route('/api/sensors/rescan', methods=['POST'])

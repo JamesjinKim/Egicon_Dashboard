@@ -15,7 +15,7 @@
         <div class="card scan-section">
             <div class="card-header">
                 <div class="card-title">
-                    <i class="fas fa-search"></i> I2C 디바이스 스캔
+                    <i class="fas fa-search"></i> 통합 센서 검색 (I2C + UART)
                 </div>
                 <button id="scan-button" class="scan-btn">
                     <i class="fas fa-sync-alt"></i> 스캔 시작
@@ -37,7 +37,8 @@
                     <table class="scan-table" id="scan-results-table">
                         <thead>
                             <tr>
-                                <th>버스</th>
+                                <th>통신방식</th>
+                                <th>버스/포트</th>
                                 <th>주소</th>
                                 <th>센서명</th>
                                 <th>타입</th>
@@ -47,7 +48,7 @@
                         </thead>
                         <tbody id="scan-results-body">
                             <tr class="no-results">
-                                <td colspan="6">스캔을 실행하여 연결된 디바이스를 확인하세요</td>
+                                <td colspan="7">스캔을 실행하여 연결된 디바이스를 확인하세요</td>
                             </tr>
                         </tbody>
                     </table>
@@ -252,5 +253,25 @@
 {% endblock %}
 
 {% block scripts %}
+    <style>
+        .comm-badge {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+            text-align: center;
+            color: white;
+            min-width: 50px;
+            display: inline-block;
+        }
+        
+        .comm-badge.i2c {
+            background-color: #3498db;
+        }
+        
+        .comm-badge.uart {
+            background-color: #e67e22;
+        }
+    </style>
     <script src="{{ url_for('static', filename='js/settings.js') }}"></script>
 {% endblock %}

@@ -66,8 +66,8 @@ async function startScan() {
     progressText.textContent = '스캔 준비 중...';
     
     try {
-        // 스캔 시작 요청
-        const response = await fetch(`${API_URL}/i2c/scan`, {
+        // 통합 센서 검색 요청
+        const response = await fetch(`${API_URL}/sensors/scan-all`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -81,10 +81,10 @@ async function startScan() {
         const result = await response.json();
         
         if (result.success) {
-            currentScanResult = result.data;
+            currentScanResult = result;
             updateScanResults(currentScanResult);
             updateSensorConnectionStatus();
-            showToast('success', '스캔이 완료되었습니다.');
+            showToast('success', '통합 센서 검색이 완료되었습니다.');
         } else {
             throw new Error(result.message || '스캔 실패');
         }
@@ -107,38 +107,57 @@ async function startScan() {
     }
 }
 
-// 스캔 결과 업데이트
+// 통합 센서 검색 결과 업데이트
 function updateScanResults(scanResult) {
     const tbody = document.getElementById('scan-results-body');
     tbody.innerHTML = '';
     
-    if (!scanResult || !scanResult.buses || Object.keys(scanResult.buses).length === 0) {
-        tbody.innerHTML = '<tr class="no-results"><td colspan="6">발견된 디바이스가 없습니다</td></tr>';
+    const i2cDevices = scanResult.i2c_devices || [];
+    const uartDevices = scanResult.uart_devices || [];
+    const totalDevices = i2cDevices.length + uartDevices.length;
+    
+    if (totalDevices === 0) {
+        tbody.innerHTML = '<tr class="no-results"><td colspan="7">발견된 센서가 없습니다</td></tr>';
         return;
     }
     
-    // 각 버스별로 디바이스 표시
-    for (const [busNum, addresses] of Object.entries(scanResult.buses)) {
-        for (const address of addresses) {
-            const row = document.createElement('tr');
-            row.innerHTML = `
-                <td>버스 ${busNum}</td>
-                <td>0x${address.toString(16).toUpperCase().padStart(2, '0')}</td>
-                <td id="sensor-name-${address}">-</td>
-                <td id="sensor-type-${address}">-</td>
-                <td><span class="status-badge status-unknown">확인 중</span></td>
-                <td>
-                    <button class="action-btn test-btn" onclick="testDevice(${busNum}, ${address})">
-                        <i class="fas fa-vial"></i> 테스트
-                    </button>
-                </td>
-            `;
-            tbody.appendChild(row);
-        }
-    }
+    // I2C 디바이스 표시
+    i2cDevices.forEach(device => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td><span class="comm-badge i2c">I2C</span></td>
+            <td>버스 ${device.bus}</td>
+            <td>${device.address}</td>
+            <td>${device.sensor_name}</td>
+            <td>${device.sensor_type}</td>
+            <td><span class="status-badge status-connected">${device.status}</span></td>
+            <td>
+                <button class="action-btn test-btn" onclick="testI2CDevice(${device.bus}, '${device.address}')">
+                    <i class="fas fa-vial"></i> 테스트
+                </button>
+            </td>
+        `;
+        tbody.appendChild(row);
+    });
     
-    // 센서 정보 업데이트
-    updateScannedSensorInfo();
+    // UART 디바이스 표시
+    uartDevices.forEach(device => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td><span class="comm-badge uart">UART</span></td>
+            <td>${device.port}</td>
+            <td>${device.address}</td>
+            <td>${device.sensor_name}</td>
+            <td>${device.sensor_type}</td>
+            <td><span class="status-badge status-connected">${device.status}</span></td>
+            <td>
+                <button class="action-btn test-btn" onclick="testUARTDevice('${device.port}')">
+                    <i class="fas fa-vial"></i> 테스트
+                </button>
+            </td>
+        `;
+        tbody.appendChild(row);
+    });
 }
 
 // 스캔된 센서 정보 업데이트

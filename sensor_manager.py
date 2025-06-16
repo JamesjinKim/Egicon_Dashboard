@@ -936,13 +936,15 @@ class SensorManager:
         bme688_connected = self.bme688 is not None and self.bme688.connected
         bh1750_connected = self.bh1750 is not None and self.bh1750.connected
         sdp810_connected = self.sdp810 is not None and self.sdp810.connected
+        sps30_connected = self.sps30 is not None and self.sps30.connected
         
         return {
             'sht40_connected': sht40_connected,
             'bme688_connected': bme688_connected,
             'bh1750_connected': bh1750_connected,
             'sdp810_connected': sdp810_connected,
-            'sensor_count': int(sht40_connected) + int(bme688_connected) + int(bh1750_connected) + int(sdp810_connected)
+            'sps30_connected': sps30_connected,
+            'sensor_count': int(sht40_connected) + int(bme688_connected) + int(bh1750_connected) + int(sdp810_connected) + int(sps30_connected)
         }
     
     def close_sensors(self):
