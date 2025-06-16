@@ -119,6 +119,9 @@ class SPS30Sensor:
                 print(f"✅ SPS30 센서 연결 성공")
                 print(f"📊 시리얼 번호: {self.serial_number}")
                 
+                # 센서 안정화 대기
+                time.sleep(1)
+                
                 return True
                 
         except Exception as e:
@@ -159,18 +162,20 @@ class SPS30Sensor:
             return None
         
         try:
-            with ShdlcSerialPort(port=self.port_path, baudrate=115200, timeout=3) as port:
+            with ShdlcSerialPort(port=self.port_path, baudrate=115200) as port:
                 device = Sps30ShdlcDevice(ShdlcConnection(port))
                 
                 # 측정이 시작되지 않았다면 시작
                 try:
                     device.start_measurement()
-                    time.sleep(1)  # 측정 안정화 대기
-                except:
+                    time.sleep(2)  # 측정 안정화 대기 (1초 → 2초로 증가)
+                except Exception as e:
+                    print(f"⚠️ SPS30 측정 시작 중 오류 (무시됨): {e}")
                     pass  # 이미 측정 중일 수 있음
                 
                 # 데이터 읽기
                 raw_data = device.read_measured_value()
+                print(f"🔍 SPS30 원시 데이터: {raw_data} (길이: {len(raw_data) if raw_data else 0})")
                 
                 if not raw_data or len(raw_data) < 3:
                     print(f"⚠️ SPS30 데이터 부족: {len(raw_data) if raw_data else 0}개")
@@ -241,7 +246,7 @@ class SPS30Sensor:
             return False
             
         try:
-            with ShdlcSerialPort(port=self.port_path, baudrate=115200, timeout=3) as port:
+            with ShdlcSerialPort(port=self.port_path, baudrate=115200) as port:
                 device = Sps30ShdlcDevice(ShdlcConnection(port))
                 device.device_reset()
                 time.sleep(2)  # 리셋 후 대기
@@ -258,7 +263,7 @@ class SPS30Sensor:
             return False
             
         try:
-            with ShdlcSerialPort(port=self.port_path, baudrate=115200, timeout=3) as port:
+            with ShdlcSerialPort(port=self.port_path, baudrate=115200) as port:
                 device = Sps30ShdlcDevice(ShdlcConnection(port))
                 device.start_measurement()
                 print("✅ SPS30 측정 시작")
@@ -274,7 +279,7 @@ class SPS30Sensor:
             return False
             
         try:
-            with ShdlcSerialPort(port=self.port_path, baudrate=115200, timeout=3) as port:
+            with ShdlcSerialPort(port=self.port_path, baudrate=115200) as port:
                 device = Sps30ShdlcDevice(ShdlcConnection(port))
                 device.stop_measurement()
                 print("✅ SPS30 측정 중지")
