@@ -354,7 +354,7 @@ class SensorManager:
     
     
     def read_all_sensors(self):
-        """모든 센서 데이터 읽기"""
+        """모든 센서 데이터 읽기 (SPS30 우선순위 적용)"""
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         
         result = {
@@ -382,62 +382,7 @@ class SensorManager:
             }
         }
         
-        # SHT40 데이터 읽기 (우선)
-        if self.sht40 and self.sht40.connected:
-            sht40_data = self.sht40.read_data()
-            if sht40_data:
-                result['temperature'] = sht40_data['temperature']
-                result['humidity'] = sht40_data['humidity']
-                # 성공 시 오류 카운트 리셋
-                if 'sht40' in self.sensor_error_count:
-                    self.sensor_error_count['sht40'] = 0
-            else:
-                self._handle_sensor_error('sht40')
-        
-        # BME688 데이터 읽기 (온도/습도가 없을 때만)
-        if self.bme688 and self.bme688.connected:
-            bme_data = self.bme688.read_data()
-            if bme_data:
-                # SHT40 데이터가 없을 때만 BME688 온도/습도 사용
-                if result['temperature'] is None:
-                    result['temperature'] = bme_data['temperature']
-                if result['humidity'] is None:
-                    result['humidity'] = bme_data['humidity']
-                # BME688 고유 데이터는 항상 사용
-                result['pressure'] = bme_data['pressure']
-                result['gas_resistance'] = bme_data['gas_resistance']
-                result['air_quality'] = bme_data['air_quality']
-                result['absolute_pressure'] = bme_data['pressure']  # 절대압력 = 압력
-                # 성공 시 오류 카운트 리셋
-                if 'bme688' in self.sensor_error_count:
-                    self.sensor_error_count['bme688'] = 0
-            else:
-                self._handle_sensor_error('bme688')
-        
-        # BH1750 데이터 읽기
-        if self.bh1750 and self.bh1750.connected:
-            light_data = self.bh1750.read_data()
-            if light_data is not None:
-                result['light'] = light_data
-                # 성공 시 오류 카운트 리셋
-                if 'bh1750' in self.sensor_error_count:
-                    self.sensor_error_count['bh1750'] = 0
-            else:
-                self._handle_sensor_error('bh1750')
-        
-        # SDP810 데이터 읽기 (차압)
-        if self.sdp810 and self.sdp810.connected:
-            differential_pressure_data = self.sdp810.read_data()
-            if differential_pressure_data is not None:
-                # SDP810 차압을 별도 필드에 저장
-                result['differential_pressure'] = differential_pressure_data
-                # 성공 시 오류 카운트 리셋
-                if 'sdp810' in self.sensor_error_count:
-                    self.sensor_error_count['sdp810'] = 0
-            else:
-                self._handle_sensor_error('sdp810')
-        
-        # SPS30 데이터 읽기 (미세먼지) - 간소화된 로직
+        # 1. SPS30 최우선 처리 (UART 통신, 긴 초기화 시간 필요)
         if self.sps30 and self.sps30.connected:
             try:
                 sps30_data = self.sps30.read_data()
@@ -463,6 +408,61 @@ class SensorManager:
                 self._handle_sensor_error('sps30')
         else:
             result['sensor_status']['sps30'] = False
+        
+        # 2. SHT40 데이터 읽기 (I2C 통신, 빠른 응답)
+        if self.sht40 and self.sht40.connected:
+            sht40_data = self.sht40.read_data()
+            if sht40_data:
+                result['temperature'] = sht40_data['temperature']
+                result['humidity'] = sht40_data['humidity']
+                # 성공 시 오류 카운트 리셋
+                if 'sht40' in self.sensor_error_count:
+                    self.sensor_error_count['sht40'] = 0
+            else:
+                self._handle_sensor_error('sht40')
+        
+        # 3. BME688 데이터 읽기 (온도/습도가 없을 때만)
+        if self.bme688 and self.bme688.connected:
+            bme_data = self.bme688.read_data()
+            if bme_data:
+                # SHT40 데이터가 없을 때만 BME688 온도/습도 사용
+                if result['temperature'] is None:
+                    result['temperature'] = bme_data['temperature']
+                if result['humidity'] is None:
+                    result['humidity'] = bme_data['humidity']
+                # BME688 고유 데이터는 항상 사용
+                result['pressure'] = bme_data['pressure']
+                result['gas_resistance'] = bme_data['gas_resistance']
+                result['air_quality'] = bme_data['air_quality']
+                result['absolute_pressure'] = bme_data['pressure']  # 절대압력 = 압력
+                # 성공 시 오류 카운트 리셋
+                if 'bme688' in self.sensor_error_count:
+                    self.sensor_error_count['bme688'] = 0
+            else:
+                self._handle_sensor_error('bme688')
+        
+        # 4. BH1750 데이터 읽기
+        if self.bh1750 and self.bh1750.connected:
+            light_data = self.bh1750.read_data()
+            if light_data is not None:
+                result['light'] = light_data
+                # 성공 시 오류 카운트 리셋
+                if 'bh1750' in self.sensor_error_count:
+                    self.sensor_error_count['bh1750'] = 0
+            else:
+                self._handle_sensor_error('bh1750')
+        
+        # 5. SDP810 데이터 읽기 (차압)
+        if self.sdp810 and self.sdp810.connected:
+            differential_pressure_data = self.sdp810.read_data()
+            if differential_pressure_data is not None:
+                # SDP810 차압을 별도 필드에 저장
+                result['differential_pressure'] = differential_pressure_data
+                # 성공 시 오류 카운트 리셋
+                if 'sdp810' in self.sensor_error_count:
+                    self.sensor_error_count['sdp810'] = 0
+            else:
+                self._handle_sensor_error('sdp810')
         
         return result
     

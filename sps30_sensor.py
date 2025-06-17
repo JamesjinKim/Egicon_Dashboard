@@ -25,7 +25,7 @@ except ImportError:
 # 전역 SPS30 접근 제어
 _sps30_lock = threading.Lock()
 _sps30_last_access = 0
-_sps30_min_interval = 2.0  # 최소 2초 간격
+_sps30_min_interval = 2.0  # 최소 2초 간격 복수의 센서 연결 시 최소 1.5초 간격으로 설정
 _sps30_cached_data = None
 _sps30_cache_time = 0
 _sps30_cache_valid_duration = 1.5  # 1.5초 동안 캐시 유효
@@ -184,8 +184,8 @@ class SPS30Sensor:
                 _sps30_lock._last_cache_log = current_time
             return _sps30_cached_data.copy()
         
-        # 접근 제어 락 획득 시도 (1초 대기)
-        if not _sps30_lock.acquire(blocking=True, timeout=1.0):
+        # 접근 제어 락 획득 시도 (8초 대기 - 초기화 시간 고려)
+        if not _sps30_lock.acquire(blocking=True, timeout=8.0):
             # 락 메시지 로그 빈도 줄이기 (30초마다 출력)
             if not hasattr(_sps30_lock, '_last_lock_log') or current_time - getattr(_sps30_lock, '_last_lock_log', 0) > 30:
                 print("🔒 SPS30 락 타임아웃 - 캐시된 데이터 반환")
