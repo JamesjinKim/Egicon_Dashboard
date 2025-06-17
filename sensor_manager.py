@@ -42,6 +42,10 @@ class SensorManager:
         self.sensor_error_count = {}  # 센서별 오류 카운트
         self.last_sensor_config = {}  # 센서 구성 저장
         
+        # BME688 센서 접근 주기 개선을 위한 변수
+        self.last_bme_read_time = 0
+        self.bme_read_interval = 5.0  # BME688은 5초마다 읽기
+        
         print("🚀 센서 관리자 초기화 (I2C 센서 전용 - SPS30 백그라운드 분리)")
     
     def initialize_sensors(self):
@@ -379,9 +383,13 @@ class SensorManager:
             else:
                 self._handle_sensor_error('sht40')
         
-        # 3. BME688 데이터 읽기 (온도/습도가 없을 때만)
+        # 3. BME688 데이터 읽기 (안정성 개선된 주기 적용)
         if self.bme688 and self.bme688.connected:
-            bme_data = self.bme688.read_data()
+            current_time = time.time()
+            
+            # BME688은 내부 캐싱 시스템 사용 (3초 최소 간격)
+            bme_data = self.bme688.read_data()  # 내부에서 자체 캐싱 처리
+            
             if bme_data:
                 # SHT40 데이터가 없을 때만 BME688 온도/습도 사용
                 if result['temperature'] is None:
@@ -393,9 +401,12 @@ class SensorManager:
                 result['gas_resistance'] = bme_data['gas_resistance']
                 result['air_quality'] = bme_data['air_quality']
                 result['absolute_pressure'] = bme_data['pressure']  # 절대압력 = 압력
+                
                 # 성공 시 오류 카운트 리셋
                 if 'bme688' in self.sensor_error_count:
                     self.sensor_error_count['bme688'] = 0
+                self.last_bme_read_time = current_time
+                
             else:
                 self._handle_sensor_error('bme688')
         

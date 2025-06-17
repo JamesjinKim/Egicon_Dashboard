@@ -68,7 +68,7 @@ const SENSOR_WIDGETS = {
 // 센서별 업데이트 간격 설정 (밀리초)
 const SENSOR_UPDATE_INTERVALS = {
     sht40: 5000,      // 5초 - 온도/습도 변화 매우 느림
-    bme688: 3000,     // 3초 - 가스저항은 중간 속도
+    bme688: 5000,     // 5초 - BME688 내부 캐싱(3초)과 충돌 방지
     bh1750: 1000,     // 1초 - 조도 변화 빠름 (조명, 그림자)
     sdp810: 1000,     // 1초 - I2C 버스 안정성을 위해 0.5초에서 조정
     sps30: 3000,      // 3초 - 미세먼지 변화 중간 속도
@@ -596,9 +596,16 @@ function updateIndividualSensorDisplay(sensorType, data) {
 function checkSensorDataValidity(sensorType, data) {
     switch (sensorType) {
         case 'sht40':
-        case 'bme688':
             return data.temperature !== undefined && data.temperature !== null &&
-                   data.humidity !== undefined && data.humidity !== null;
+                   data.humidity !== undefined && data.humidity !== null &&
+                   data.temperature > -40 && data.temperature < 85; // SHT40 유효 범위
+        case 'bme688':
+            // BME688은 압력 데이터도 확인
+            const tempValid = data.temperature !== undefined && data.temperature !== null &&
+                             data.temperature > -40 && data.temperature < 85; // 유효 온도 범위
+            const pressureValid = data.pressure !== undefined && data.pressure !== null &&
+                                 data.pressure > 300 && data.pressure < 1100; // 유효 압력 범위
+            return tempValid || pressureValid; // 온도 또는 압력 중 하나라도 유효하면 OK
         case 'bh1750':
             return data.light !== undefined && data.light !== null;
         case 'sdp810':
@@ -630,10 +637,27 @@ function updateSensorWidgets(sensorType, data) {
             updateSensorWidget('sht40', 'humidity', data.humidity, '%');
             break;
         case 'bme688':
-            updateSensorWidget('bme688', 'temperature', data.temperature, '°C');
-            updateSensorWidget('bme688', 'humidity', data.humidity, '%');
-            updateSensorWidget('bme688', 'pressure', data.pressure, 'hPa');
-            updateSensorWidget('bme688', 'airquality', data.air_quality, '/100');
+            // BME688 데이터 유효성 개별 처리
+            if (data.temperature !== undefined && data.temperature > -40 && data.temperature < 85) {
+                updateSensorWidget('bme688', 'temperature', data.temperature, '°C');
+            } else {
+                document.getElementById('bme688-temp-value').innerHTML = '--<span class="widget-unit">°C</span>';
+            }
+            if (data.humidity !== undefined && data.humidity >= 0 && data.humidity <= 100) {
+                updateSensorWidget('bme688', 'humidity', data.humidity, '%');
+            } else {
+                document.getElementById('bme688-humidity-value').innerHTML = '--<span class="widget-unit">%</span>';
+            }
+            if (data.pressure !== undefined && data.pressure > 300 && data.pressure < 1100) {
+                updateSensorWidget('bme688', 'pressure', data.pressure, 'hPa');
+            } else {
+                document.getElementById('bme688-pressure-value').innerHTML = '--<span class="widget-unit">hPa</span>';
+            }
+            if (data.air_quality !== undefined && data.air_quality >= 0) {
+                updateSensorWidget('bme688', 'airquality', data.air_quality, '/100');
+            } else {
+                document.getElementById('bme688-airquality-value').innerHTML = '--<span class="widget-unit">/100</span>';
+            }
             break;
         case 'bh1750':
             updateSensorWidget('bh1750', 'light', data.light, 'lux');
@@ -733,10 +757,27 @@ function updateSensorWidgetFromMulti(sensorType, data, sensorCount) {
             updateSensorWidget('sht40', 'humidity', data.humidity, '%');
             break;
         case 'bme688':
-            updateSensorWidget('bme688', 'temperature', data.temperature, '°C');
-            updateSensorWidget('bme688', 'humidity', data.humidity, '%');
-            updateSensorWidget('bme688', 'pressure', data.pressure, 'hPa');
-            updateSensorWidget('bme688', 'airquality', data.air_quality, '/100');
+            // BME688 멀티 센서 데이터 유효성 개별 처리
+            if (data.temperature !== undefined && data.temperature > -40 && data.temperature < 85) {
+                updateSensorWidget('bme688', 'temperature', data.temperature, '°C');
+            } else {
+                document.getElementById('bme688-temp-value').innerHTML = '--<span class="widget-unit">°C</span>';
+            }
+            if (data.humidity !== undefined && data.humidity >= 0 && data.humidity <= 100) {
+                updateSensorWidget('bme688', 'humidity', data.humidity, '%');
+            } else {
+                document.getElementById('bme688-humidity-value').innerHTML = '--<span class="widget-unit">%</span>';
+            }
+            if (data.pressure !== undefined && data.pressure > 300 && data.pressure < 1100) {
+                updateSensorWidget('bme688', 'pressure', data.pressure, 'hPa');
+            } else {
+                document.getElementById('bme688-pressure-value').innerHTML = '--<span class="widget-unit">hPa</span>';
+            }
+            if (data.air_quality !== undefined && data.air_quality >= 0) {
+                updateSensorWidget('bme688', 'airquality', data.air_quality, '/100');
+            } else {
+                document.getElementById('bme688-airquality-value').innerHTML = '--<span class="widget-unit">/100</span>';
+            }
             break;
         case 'sdp810':
             updateSensorWidget('sdp810', 'pressure', data.differential_pressure, 'Pa');
