@@ -190,7 +190,10 @@ class SPS30Sensor:
             if not hasattr(_sps30_lock, '_last_lock_log') or current_time - getattr(_sps30_lock, '_last_lock_log', 0) > 30:
                 print("🔒 SPS30 다른 프로세스에서 사용 중 - 캐시된 데이터 반환")
                 _sps30_lock._last_lock_log = current_time
-            return _sps30_cached_data.copy() if _sps30_cached_data else None
+            return _sps30_cached_data.copy() if _sps30_cached_data else {
+                'pm1': 0.0, 'pm25': 0.0, 'pm4': 0.0, 'pm10': 0.0,
+                'timestamp': time.time(), 'cached': True
+            }
         
         try:
             # 최소 간격 확인
