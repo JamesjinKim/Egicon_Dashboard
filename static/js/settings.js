@@ -311,9 +311,6 @@ function displaySensors(sensors) {
             <td>${sensor.voltage}</td>
             <td><span class="status-badge ${statusClass}">${statusText}</span></td>
             <td>
-                ${isConnected ? `<button class="action-btn test-btn" onclick="testSensorById(${sensor.address})">
-                    <i class="fas fa-vial"></i> 테스트
-                </button>` : ''}
                 ${!isDefault ? `
                     <button class="action-btn edit-btn" onclick="editSensor(${sensor.id})">
                         <i class="fas fa-edit"></i> 편집
