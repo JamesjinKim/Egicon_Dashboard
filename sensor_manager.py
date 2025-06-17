@@ -15,7 +15,7 @@ from bme688_sensor import BME688Sensor
 from sht40_sensor import SHT40Sensor
 from bh1750_sensor import BH1750Sensor
 from sdp810_sensor import SDP810Sensor
-from sps30_sensor import SPS30Sensor
+from sps30_background_thread import SPS30BackgroundThread
 
 
 
@@ -23,25 +23,26 @@ class SensorManager:
     """라즈베리파이 전용 센서 관리자 (멀티 센서 지원)"""
     
     def __init__(self):
-        # 멀티 센서 지원을 위한 리스트 구조
+        # 멀티 센서 지원을 위한 리스트 구조 (I2C 센서들만)
         self.sht40_sensors = []    # SHT40 센서들
         self.bme688_sensors = []   # BME688 센서들  
         self.bh1750_sensors = []   # BH1750 센서들
         self.sdp810_sensors = []   # SDP810 센서들
-        self.sps30_sensors = []    # SPS30 미세먼지 센서들
         
         # 레거시 호환성을 위한 단일 참조 (첫 번째 센서)
         self.sht40 = None
         self.bme688 = None
         self.bh1750 = None
         self.sdp810 = None
-        self.sps30 = None
+        
+        # SPS30 백그라운드 스레드 (독립 처리)
+        self.sps30_background = None
         
         self.buses = {}
         self.sensor_error_count = {}  # 센서별 오류 카운트
         self.last_sensor_config = {}  # 센서 구성 저장
         
-        print("🚀 센서 관리자 초기화 (라즈베리파이 전용 - 멀티 센서 지원)")
+        print("🚀 센서 관리자 초기화 (I2C 센서 전용 - SPS30 백그라운드 분리)")
     
     def initialize_sensors(self):
         """센서 초기화"""
@@ -90,14 +91,21 @@ class SensorManager:
             self.sdp810 = self.sdp810_sensors[0]['sensor']  # 레거시 호환성 - 센서 객체 참조
             success_count += len(self.sdp810_sensors)
         
-        # SPS30 센서들 검색 (시리얼 통신)
-        print("🔍 SPS30 센서 검색 중...")
-        self.sps30_sensors = self._find_all_sps30()
-        if self.sps30_sensors:
-            self.sps30 = self.sps30_sensors[0]['sensor']  # 레거시 호환성 - 센서 객체 참조
-            success_count += len(self.sps30_sensors)
+        # SPS30 백그라운드 스레드 초기화 (독립 처리)
+        print("🔍 SPS30 백그라운드 스레드 초기화 중...")
+        try:
+            self.sps30_background = SPS30BackgroundThread(update_interval=15)
+            if self.sps30_background.start():
+                success_count += 1
+                print("✅ SPS30 백그라운드 스레드 시작 성공")
+            else:
+                print("❌ SPS30 백그라운드 스레드 시작 실패")
+                self.sps30_background = None
+        except Exception as e:
+            print(f"❌ SPS30 백그라운드 스레드 초기화 오류: {e}")
+            self.sps30_background = None
         
-        total_sensors = 5  # SPS30 추가로 5개 센서 타입
+        total_sensors = 5  # SHT40, BME688, BH1750, SDP810, SPS30
         print(f"📊 센서 초기화 완료: {success_count}/{total_sensors}개 센서 연결")
         
         # 현재 센서 구성 저장
@@ -112,7 +120,7 @@ class SensorManager:
             'bme688': self.bme688 is not None and self.bme688.connected,
             'bh1750': self.bh1750 is not None and self.bh1750.connected,
             'sdp810': self.sdp810 is not None and self.sdp810.connected,
-            'sps30': self.sps30 is not None and self.sps30.connected
+            'sps30': self.sps30_background is not None and self.sps30_background.is_healthy()
         }
     
     def _find_all_sht40(self):
@@ -242,47 +250,6 @@ class SensorManager:
         
         return found_sensors
     
-    def _find_all_sps30(self):
-        """모든 SPS30 센서들 찾기 (시리얼 통신)"""
-        found_sensors = []
-        sensor_count = 0
-        
-        print("🔍 SPS30 미세먼지 센서 검색 중...")
-        
-        try:
-            # SPS30 센서 자동 검색
-            port_path, count = SPS30Sensor.find_sps30()
-            
-            if port_path and count > 0:
-                # 센서 연결 시도
-                sps30 = SPS30Sensor(port=port_path)
-                
-                if sps30.connected:
-                    sensor_count += 1
-                    alias = f"SPS30-{sensor_count}"
-                    
-                    sensor_info = {
-                        'sensor': sps30,
-                        'alias': alias,
-                        'type': 'SPS30',
-                        'port': port_path,
-                        'serial_number': sps30.serial_number,
-                        'measurements': ['PM1.0', 'PM2.5', 'PM4.0', 'PM10'],
-                        'units': 'μg/m³'
-                    }
-                    
-                    found_sensors.append(sensor_info)
-                    print(f"✅ {alias} 연결 성공 (포트: {port_path}, S/N: {sps30.serial_number})")
-                else:
-                    print(f"❌ SPS30 센서 연결 실패 (포트: {port_path})")
-            else:
-                print("❌ SPS30 센서를 찾을 수 없습니다")
-                
-        except Exception as e:
-            print(f"❌ SPS30 센서 검색 오류: {e}")
-        
-        print(f"📊 SPS30 센서 검색 완료: {len(found_sensors)}개 발견")
-        return found_sensors
     
     def _test_sdp810_direct(self, bus, address):
         """SDP810 직접 통신 테스트 (simpleEddy.py 방식)"""
@@ -378,34 +345,25 @@ class SensorManager:
                 'bh1750': self.bh1750 is not None and self.bh1750.connected,
                 'sht40': self.sht40 is not None and self.sht40.connected,
                 'sdp810': self.sdp810 is not None and self.sdp810.connected,
-                'sps30': self.sps30 is not None and self.sps30.connected
+                'sps30': self.sps30_background is not None and self.sps30_background.is_healthy()
             }
         }
         
-        # 1. SPS30 최우선 처리 (UART 통신, 긴 초기화 시간 필요)
-        if self.sps30 and self.sps30.connected:
+        # 1. SPS30 백그라운드 스레드에서 데이터 가져오기 (즉시 응답)
+        if self.sps30_background and self.sps30_background.is_healthy():
             try:
-                sps30_data = self.sps30.read_data()
-                if sps30_data:
+                sps30_data = self.sps30_background.get_current_data()
+                if sps30_data and sps30_data.get('connected', False):
                     result['pm1'] = sps30_data['pm1']
                     result['pm25'] = sps30_data['pm25']
                     result['pm4'] = sps30_data['pm4']
                     result['pm10'] = sps30_data['pm10']
                     result['sensor_status']['sps30'] = True
-                    # 성공 시 오류 카운트 리셋 (캐시된 데이터도 유효한 데이터로 처리)
-                    if 'sps30' in self.sensor_error_count:
-                        self.sensor_error_count['sps30'] = 0
-                    # 캐시된 기본값이어도 센서는 연결된 상태로 처리
-                    if sps30_data.get('cached', False):
-                        # 캐시된 기본값일 때도 센서 상태는 True 유지
-                        pass
                 else:
-                    # None 반환 시에만 센서 오류로 처리 (기본값 반환은 정상)
                     result['sensor_status']['sps30'] = False
-                    self._handle_sensor_error('sps30')
-            except Exception:
+            except Exception as e:
+                print(f"❌ SPS30 백그라운드 데이터 읽기 오류: {e}")
                 result['sensor_status']['sps30'] = False
-                self._handle_sensor_error('sps30')
         else:
             result['sensor_status']['sps30'] = False
         
@@ -614,11 +572,18 @@ class SensorManager:
         else:
             self.sdp810 = None
             
-        self.sps30_sensors = self._find_all_sps30()
-        if self.sps30_sensors:
-            self.sps30 = self.sps30_sensors[0]['sensor']
-        else:
-            self.sps30 = None
+        # SPS30 백그라운드 스레드 재시작
+        if self.sps30_background:
+            self.sps30_background.stop()
+            self.sps30_background = None
+            
+        try:
+            self.sps30_background = SPS30BackgroundThread(update_interval=15)
+            if not self.sps30_background.start():
+                self.sps30_background = None
+        except Exception as e:
+            print(f"❌ SPS30 백그라운드 스레드 재시작 오류: {e}")
+            self.sps30_background = None
         
         # 오류 카운트 리셋
         self.sensor_error_count.clear()
@@ -646,7 +611,7 @@ class SensorManager:
         bme688_connected = self.bme688 is not None and self.bme688.connected
         bh1750_connected = self.bh1750 is not None and self.bh1750.connected
         sdp810_connected = self.sdp810 is not None and self.sdp810.connected
-        sps30_connected = self.sps30 is not None and self.sps30.connected
+        sps30_connected = self.sps30_background is not None and self.sps30_background.is_healthy()
         
         return {
             'sht40_connected': sht40_connected,
@@ -661,11 +626,17 @@ class SensorManager:
         """센서 연결 해제"""
         print("🔌 센서 연결 해제 중...")
         
+        # I2C 버스 해제
         for bus in self.buses.values():
             try:
                 bus.close()
             except:
                 pass
+        
+        # SPS30 백그라운드 스레드 종료
+        if self.sps30_background:
+            self.sps30_background.stop()
+            self.sps30_background = None
         
         self.buses.clear()
         self.sht40 = None

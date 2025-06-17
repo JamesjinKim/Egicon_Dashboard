@@ -434,22 +434,22 @@ def scan_all_sensors():
             except Exception as e:
                 print(f"I2C 스캔 오류: {e}")
         
-        # UART 디바이스 검색 (SPS30)
-        if sensor_manager:
+        # UART 디바이스 검색 (SPS30 백그라운드 스레드)
+        if sensor_manager and sensor_manager.sps30_background:
             try:
-                from sps30_sensor import SPS30Sensor
-                port_path, count = SPS30Sensor.find_sps30()
-                if port_path and count > 0:
+                status = sensor_manager.sps30_background.get_status()
+                if status and status.get('sensor_connected', False):
                     results['uart_devices'].append({
                         'communication_type': 'UART',
-                        'port': port_path,
+                        'port': status.get('port_path', 'Unknown'),
                         'address': 'N/A',
                         'sensor_name': 'SPS30',
                         'sensor_type': '미세먼지센서',
-                        'status': 'Connected'
+                        'status': 'Connected (Background Thread)',
+                        'serial_number': status.get('serial_number', 'Unknown')
                     })
             except Exception as e:
-                print(f"UART 스캔 오류: {e}")
+                print(f"SPS30 백그라운드 스레드 스캔 오류: {e}")
         
         return jsonify(results)
         
@@ -524,25 +524,32 @@ def rescan_sensors():
 
 @app.route('/api/debug/sps30', methods=['GET'])
 def debug_sps30():
-    """SPS30 디버깅 정보"""
+    """SPS30 백그라운드 스레드 디버깅 정보"""
     global sensor_manager
     
     if not sensor_manager:
         return jsonify({'error': 'sensor_manager가 없습니다'})
     
     debug_info = {
-        'sps30_object_exists': sensor_manager.sps30 is not None,
-        'sps30_connected': sensor_manager.sps30.connected if sensor_manager.sps30 else False,
-        'sps30_sensors_count': len(sensor_manager.sps30_sensors),
+        'background_thread_exists': sensor_manager.sps30_background is not None,
         'sensor_status': sensor_manager.get_sensor_status()
     }
     
-    if sensor_manager.sps30:
+    if sensor_manager.sps30_background:
         try:
-            test_data = sensor_manager.sps30.read_data()
-            debug_info['test_read_data'] = test_data
+            # 백그라운드 스레드 상태 정보
+            thread_status = sensor_manager.sps30_background.get_status()
+            debug_info['thread_status'] = thread_status
+            
+            # 현재 캐시된 데이터
+            current_data = sensor_manager.sps30_background.get_current_data()
+            debug_info['current_data'] = current_data
+            
+            # 건강성 체크
+            debug_info['is_healthy'] = sensor_manager.sps30_background.is_healthy()
+            
         except Exception as e:
-            debug_info['test_read_error'] = str(e)
+            debug_info['debug_error'] = str(e)
     
     return jsonify(debug_info)
 
