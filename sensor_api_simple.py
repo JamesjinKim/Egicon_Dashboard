@@ -419,20 +419,32 @@ def scan_all_sensors():
         # I2C 디바이스 스캔
         if i2c_scanner:
             try:
-                scan_result = i2c_scanner.scan_all_buses()
-                for bus_num, devices in scan_result.get('buses', {}).items():
-                    for device in devices:
-                        sensor_info = sensor_db.get_sensor_by_address(device) if sensor_db else None
-                        results['i2c_devices'].append({
-                            'communication_type': 'I2C',
-                            'bus': bus_num,
-                            'address': f'0x{device:02X}',
-                            'sensor_name': sensor_info.get('name', 'Unknown') if sensor_info else 'Unknown',
-                            'sensor_type': sensor_info.get('type', '미등록') if sensor_info else '미등록',
-                            'status': 'Connected'
-                        })
+                print("🔍 I2C 스캔 시작...")
+                scan_result = i2c_scanner.comprehensive_scan()
+                print(f"🔍 I2C 스캔 결과: {scan_result}")
+                
+                if scan_result and scan_result.get('buses'):
+                    for bus_num, devices in scan_result['buses'].items():
+                        print(f"🔍 버스 {bus_num}: {len(devices)}개 디바이스 발견")
+                        for device in devices:
+                            sensor_info = sensor_db.get_sensor_by_address(device) if sensor_db else None
+                            results['i2c_devices'].append({
+                                'communication_type': 'I2C',
+                                'bus': bus_num,
+                                'address': f'0x{device:02X}',
+                                'sensor_name': sensor_info.get('name', 'Unknown') if sensor_info else 'Unknown',
+                                'sensor_type': sensor_info.get('type', '미등록') if sensor_info else '미등록',
+                                'status': 'Connected'
+                            })
+                else:
+                    print("⚠️ I2C 스캔 결과가 비어있음")
+                    results['message'] = '통합 센서 검색 완료 (I2C 디바이스 없음)'
             except Exception as e:
-                print(f"I2C 스캔 오류: {e}")
+                print(f"❌ I2C 스캔 오류: {e}")
+                results['message'] = f'통합 센서 검색 완료 (I2C 스캔 실패: {str(e)})'
+        else:
+            print("❌ I2C 스캐너가 초기화되지 않음")
+            results['message'] = '통합 센서 검색 완료 (I2C 스캐너 없음)'
         
         # UART 디바이스 검색 (SPS30 백그라운드 스레드)
         if sensor_manager and sensor_manager.sps30_background:

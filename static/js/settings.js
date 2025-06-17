@@ -4,6 +4,7 @@ const API_URL = window.location.origin + '/api';
 
 // 전역 변수
 let currentScanResult = null;
+let currentSensorStatus = null;
 let isScanning = false;
 
 // DOM이 로드되면 실행
@@ -213,12 +214,22 @@ async function loadSensors() {
     tbody.innerHTML = '<tr class="loading"><td colspan="7">센서 목록을 불러오는 중...</td></tr>';
     
     try {
-        const response = await fetch(`${API_URL}/sensors`);
-        if (!response.ok) {
+        // 센서 목록과 상태를 병렬로 가져오기
+        const [sensorsResponse, statusResponse] = await Promise.all([
+            fetch(`${API_URL}/sensors`),
+            fetch(`${API_URL}/status`)
+        ]);
+        
+        if (!sensorsResponse.ok) {
             throw new Error('센서 목록 로드 실패');
         }
         
-        const sensors = await response.json();
+        const sensors = await sensorsResponse.json();
+        
+        // 센서 상태 정보 저장
+        if (statusResponse.ok) {
+            currentSensorStatus = await statusResponse.json();
+        }
         
         // API 응답 검증
         if (!Array.isArray(sensors)) {
@@ -247,16 +258,32 @@ function displaySensors(sensors) {
     
     sensors.forEach(sensor => {
         const row = document.createElement('tr');
-        const hexAddress = '0x' + sensor.address.toString(16).toUpperCase().padStart(2, '0');
-        const isConnected = currentScanResult && 
-            Object.values(currentScanResult.buses).some(addresses => addresses.includes(sensor.address));
+        
+        // 주소 처리 (UART 센서는 address가 null일 수 있음)
+        let addressDisplay;
+        let isConnected = false;
+        
+        if (sensor.address !== null && sensor.address !== undefined) {
+            // I2C 센서 - 16진수 주소 표시
+            addressDisplay = '0x' + sensor.address.toString(16).toUpperCase().padStart(2, '0');
+            isConnected = currentScanResult && 
+                Object.values(currentScanResult.buses).some(addresses => addresses.includes(sensor.address));
+        } else {
+            // UART/시리얼 센서 - 통신 타입 표시
+            addressDisplay = sensor.communication_type || 'UART';
+            // UART 센서는 별도 연결 상태 확인 (예: SPS30)
+            if (sensor.name === 'SPS30') {
+                // SPS30은 센서 상태 API에서 확인
+                isConnected = currentSensorStatus && currentSensorStatus.sps30 === true;
+            }
+        }
         
         const statusClass = isConnected ? 'status-connected' : 'status-disconnected';
         const statusText = isConnected ? '연결됨' : '미연결';
         const isDefault = sensor.is_default;
         
         row.innerHTML = `
-            <td>${hexAddress}</td>
+            <td>${addressDisplay}</td>
             <td>${sensor.name}</td>
             <td>${sensor.type}</td>
             <td>${sensor.description || '-'}</td>
