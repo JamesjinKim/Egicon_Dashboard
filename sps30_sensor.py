@@ -178,12 +178,18 @@ class SPS30Sensor:
         # 캐시된 데이터가 유효한지 확인
         if (_sps30_cached_data is not None and 
             current_time - _sps30_cache_time < _sps30_cache_valid_duration):
-            print(f"📋 SPS30 캐시된 데이터 반환 (캐시 나이: {current_time - _sps30_cache_time:.1f}초)")
+            # 캐시 메시지 로그 빈도 줄이기 (10초마다 출력)
+            if not hasattr(_sps30_lock, '_last_cache_log') or current_time - getattr(_sps30_lock, '_last_cache_log', 0) > 10:
+                print(f"📋 SPS30 캐시된 데이터 반환 (캐시 나이: {current_time - _sps30_cache_time:.1f}초)")
+                _sps30_lock._last_cache_log = current_time
             return _sps30_cached_data.copy()
         
         # 접근 제어 락 획득 시도 (비블로킹)
         if not _sps30_lock.acquire(blocking=False):
-            print("🔒 SPS30 다른 프로세스에서 사용 중 - 캐시된 데이터 반환")
+            # 락 메시지 로그 빈도 줄이기 (30초마다 출력)
+            if not hasattr(_sps30_lock, '_last_lock_log') or current_time - getattr(_sps30_lock, '_last_lock_log', 0) > 30:
+                print("🔒 SPS30 다른 프로세스에서 사용 중 - 캐시된 데이터 반환")
+                _sps30_lock._last_lock_log = current_time
             return _sps30_cached_data.copy() if _sps30_cached_data else None
         
         try:
