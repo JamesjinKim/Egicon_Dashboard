@@ -447,10 +447,15 @@ class SensorManager:
                     result['pm4'] = sps30_data['pm4']
                     result['pm10'] = sps30_data['pm10']
                     result['sensor_status']['sps30'] = True
-                    # 성공 시 오류 카운트 리셋
+                    # 성공 시 오류 카운트 리셋 (캐시된 데이터도 유효한 데이터로 처리)
                     if 'sps30' in self.sensor_error_count:
                         self.sensor_error_count['sps30'] = 0
+                    # 캐시된 기본값이어도 센서는 연결된 상태로 처리
+                    if sps30_data.get('cached', False):
+                        # 캐시된 기본값일 때도 센서 상태는 True 유지
+                        pass
                 else:
+                    # None 반환 시에만 센서 오류로 처리 (기본값 반환은 정상)
                     result['sensor_status']['sps30'] = False
                     self._handle_sensor_error('sps30')
             except Exception:
