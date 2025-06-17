@@ -537,6 +537,13 @@ function updateIndividualSensorDisplay(sensorType, data) {
     try {
         console.log(`🔍 ${sensorType} 개별 센서 업데이트:`, data);
         
+        // SPS30 특별 디버깅
+        if (sensorType === 'sps30') {
+            console.log(`🐛 SPS30 디버깅 - 전체 데이터:`, JSON.stringify(data, null, 2));
+            console.log(`🐛 SPS30 연결상태:`, data.connected);
+            console.log(`🐛 SPS30 PM 데이터:`, { pm1: data.pm1, pm25: data.pm25, pm10: data.pm10 });
+        }
+        
         const statusElement = document.getElementById(SENSOR_WIDGETS[sensorType].status);
         let isConnected = false;
         let hasValidData = false;
@@ -597,8 +604,17 @@ function checkSensorDataValidity(sensorType, data) {
         case 'sdp810':
             return data.differential_pressure !== undefined && data.differential_pressure !== null;
         case 'sps30':
-            return data.pm1 !== undefined && data.pm1 !== null &&
-                   data.pm25 !== undefined && data.pm25 !== null;
+            const valid = data.pm1 !== undefined && data.pm1 !== null &&
+                         data.pm25 !== undefined && data.pm25 !== null;
+            if (sensorType === 'sps30') {
+                console.log(`🐛 SPS30 데이터 유효성 검사:`, {
+                    pm1: data.pm1,
+                    pm25: data.pm25,
+                    pm10: data.pm10,
+                    valid: valid
+                });
+            }
+            return valid;
         case 'virtual':
             return data.vibration !== undefined && data.vibration !== null;
         default:
