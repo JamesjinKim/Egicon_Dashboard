@@ -214,10 +214,11 @@ async function loadSensors() {
     tbody.innerHTML = '<tr class="loading"><td colspan="7">센서 목록을 불러오는 중...</td></tr>';
     
     try {
-        // 센서 목록과 상태를 병렬로 가져오기
-        const [sensorsResponse, statusResponse] = await Promise.all([
+        // 센서 목록, 상태, I2C 스캔을 병렬로 가져오기
+        const [sensorsResponse, statusResponse, scanResponse] = await Promise.all([
             fetch(`${API_URL}/sensors`),
-            fetch(`${API_URL}/status`)
+            fetch(`${API_URL}/status`),
+            fetch(`${API_URL}/sensors/scan-all`, { method: 'POST' })
         ]);
         
         if (!sensorsResponse.ok) {
@@ -229,6 +230,26 @@ async function loadSensors() {
         // 센서 상태 정보 저장
         if (statusResponse.ok) {
             currentSensorStatus = await statusResponse.json();
+            console.log('📊 센서 상태 정보:', currentSensorStatus);
+        }
+        
+        // I2C 스캔 결과 저장 (연결 상태 판별용)
+        if (scanResponse.ok) {
+            const scanResult = await scanResponse.json();
+            if (scanResult.success && scanResult.i2c_devices) {
+                // I2C 디바이스를 버스별로 정리
+                currentScanResult = { buses: {} };
+                scanResult.i2c_devices.forEach(device => {
+                    const busNum = device.bus;
+                    const address = parseInt(device.address.replace('0x', ''), 16);
+                    
+                    if (!currentScanResult.buses[busNum]) {
+                        currentScanResult.buses[busNum] = [];
+                    }
+                    currentScanResult.buses[busNum].push(address);
+                });
+                console.log('🔍 I2C 스캔 결과:', currentScanResult);
+            }
         }
         
         // API 응답 검증
@@ -313,13 +334,45 @@ function updateSensorStats(sensors) {
     let connectedCount = 0;
     let unknownCount = 0;
     
+    // I2C 센서 연결 상태 확인
     if (currentScanResult) {
         const scannedAddresses = Object.values(currentScanResult.buses).flat();
-        connectedCount = sensors.filter(s => scannedAddresses.includes(s.address)).length;
+        
+        sensors.forEach(sensor => {
+            if (sensor.address !== null && sensor.address !== undefined) {
+                // I2C 센서 - 스캔 결과로 확인
+                if (scannedAddresses.includes(sensor.address)) {
+                    connectedCount++;
+                }
+            } else {
+                // UART 센서 - 센서 상태 API로 확인
+                if (sensor.name === 'SPS30' && currentSensorStatus && currentSensorStatus.sps30) {
+                    connectedCount++;
+                }
+            }
+        });
+        
+        // 미등록 센서 (I2C만)
         unknownCount = scannedAddresses.filter(addr => 
             !sensors.some(s => s.address === addr)
         ).length;
+    } else {
+        // 스캔 결과가 없으면 센서 상태 API로만 확인
+        if (currentSensorStatus) {
+            sensors.forEach(sensor => {
+                if (sensor.address !== null && sensor.address !== undefined) {
+                    // I2C 센서는 개별 확인이 어려우므로 0으로 처리
+                } else {
+                    // UART 센서 - 센서 상태 API로 확인
+                    if (sensor.name === 'SPS30' && currentSensorStatus.sps30) {
+                        connectedCount++;
+                    }
+                }
+            });
+        }
     }
+    
+    console.log(`📊 센서 통계: 전체 ${totalSensors}, 연결됨 ${connectedCount}, 미등록 ${unknownCount}`);
     
     document.getElementById('total-sensors').textContent = totalSensors;
     document.getElementById('connected-sensors').textContent = connectedCount;
@@ -384,6 +437,117 @@ async function testSensorById(address) {
     } else {
         showToast('error', '센서가 연결되어 있지 않습니다.');
     }
+}
+
+// I2C 디바이스 테스트
+async function testI2CDevice(busNumber, address) {
+    console.log(`🧪 I2C 디바이스 테스트: 버스 ${busNumber}, 주소 ${address}`);
+    
+    // 주소에서 '0x' 제거하고 숫자로 변환
+    const numericAddress = parseInt(address.replace('0x', ''), 16);
+    await testDevice(busNumber, numericAddress);
+}
+
+// UART 디바이스 테스트
+async function testUARTDevice(port) {
+    console.log(`🧪 UART 디바이스 테스트: 포트 ${port}`);
+    
+    showModal('test-modal');
+    const modalBody = document.getElementById('test-modal-body');
+    modalBody.innerHTML = '<div class="loading">UART 디바이스 테스트 중...</div>';
+    
+    try {
+        // UART 디바이스 테스트는 SPS30 디버그 API 사용
+        const response = await fetch(`${API_URL}/debug/sps30`);
+        
+        if (!response.ok) {
+            throw new Error('UART 테스트 실패');
+        }
+        
+        const debugInfo = await response.json();
+        
+        // SPS30 디버그 정보를 테스트 결과로 표시
+        displayUARTTestResult(debugInfo);
+        
+    } catch (error) {
+        console.error('UART 테스트 오류:', error);
+        modalBody.innerHTML = `
+            <div class="test-result error">
+                <h4><i class="fas fa-exclamation-triangle"></i> UART 테스트 실패</h4>
+                <p>${error.message}</p>
+            </div>
+        `;
+    }
+}
+
+// UART 테스트 결과 표시
+function displayUARTTestResult(debugInfo) {
+    const modalBody = document.getElementById('test-modal-body');
+    
+    if (!debugInfo.background_thread_exists) {
+        modalBody.innerHTML = `
+            <div class="test-result error">
+                <h4><i class="fas fa-exclamation-triangle"></i> SPS30 테스트 실패</h4>
+                <p>백그라운드 스레드가 존재하지 않습니다</p>
+            </div>
+        `;
+        return;
+    }
+    
+    const isHealthy = debugInfo.is_healthy;
+    const currentData = debugInfo.current_data;
+    const threadStatus = debugInfo.thread_status;
+    
+    let html = `
+        <div class="test-result ${isHealthy ? 'success' : 'warning'}">
+            <h4><i class="fas fa-${isHealthy ? 'check-circle' : 'exclamation-triangle'}"></i> SPS30 UART 테스트</h4>
+            <div class="test-values">
+    `;
+    
+    if (threadStatus) {
+        html += `
+            <div class="value-item">
+                <span class="value-label">포트:</span>
+                <span class="value-data">${threadStatus.port_path || 'Unknown'}</span>
+            </div>
+            <div class="value-item">
+                <span class="value-label">시리얼 번호:</span>
+                <span class="value-data">${threadStatus.serial_number || 'Unknown'}</span>
+            </div>
+            <div class="value-item">
+                <span class="value-label">스레드 상태:</span>
+                <span class="value-data">${threadStatus.thread_running ? '실행 중' : '중지됨'}</span>
+            </div>
+            <div class="value-item">
+                <span class="value-label">성공률:</span>
+                <span class="value-data">${threadStatus.success_rate?.toFixed(1) || 0}%</span>
+            </div>
+        `;
+    }
+    
+    if (currentData && currentData.connected) {
+        html += `
+            <div class="value-item">
+                <span class="value-label">PM1.0:</span>
+                <span class="value-data">${currentData.pm1?.toFixed(1) || 0} μg/m³</span>
+            </div>
+            <div class="value-item">
+                <span class="value-label">PM2.5:</span>
+                <span class="value-data">${currentData.pm25?.toFixed(1) || 0} μg/m³</span>
+            </div>
+            <div class="value-item">
+                <span class="value-label">PM10:</span>
+                <span class="value-data">${currentData.pm10?.toFixed(1) || 0} μg/m³</span>
+            </div>
+        `;
+    }
+    
+    html += `
+            </div>
+        </div>
+    `;
+    
+    modalBody.innerHTML = html;
 }
 
 // 테스트 결과 표시
