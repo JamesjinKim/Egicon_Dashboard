@@ -222,7 +222,8 @@ class BME688Sensor:
         else:
             print("⚠️ BME688 측정 타임아웃 (1초)")
             return None
-            
+        
+        try:
             # BME688 필드 데이터 읽기 (17바이트)
             field_data = self.bus.read_i2c_block_data(self.address, const.FIELD0_ADDR, const.FIELD_LENGTH)
             
@@ -237,7 +238,7 @@ class BME688Sensor:
             gas_raw = (field_data[13] << 2) | (field_data[14] >> 6)
             gas_range = field_data[14] & const.GAS_RANGE_MSK
             
-            # 실제 값으로 변환 (간소화된 알고리즘)
+            # 실제 값으로 변환
             temperature = self._compensate_temperature(temp_raw)
             pressure = self._compensate_pressure(press_raw, temperature)
             humidity = self._compensate_humidity(hum_raw, temperature)
