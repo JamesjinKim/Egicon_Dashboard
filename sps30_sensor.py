@@ -184,11 +184,11 @@ class SPS30Sensor:
                 _sps30_lock._last_cache_log = current_time
             return _sps30_cached_data.copy()
         
-        # 접근 제어 락 획득 시도 (비블로킹)
-        if not _sps30_lock.acquire(blocking=False):
+        # 접근 제어 락 획득 시도 (1초 대기)
+        if not _sps30_lock.acquire(blocking=True, timeout=1.0):
             # 락 메시지 로그 빈도 줄이기 (30초마다 출력)
             if not hasattr(_sps30_lock, '_last_lock_log') or current_time - getattr(_sps30_lock, '_last_lock_log', 0) > 30:
-                print("🔒 SPS30 다른 프로세스에서 사용 중 - 캐시된 데이터 반환")
+                print("🔒 SPS30 락 타임아웃 - 캐시된 데이터 반환")
                 _sps30_lock._last_lock_log = current_time
             return _sps30_cached_data.copy() if _sps30_cached_data else {
                 'pm1': 0.0, 'pm25': 0.0, 'pm4': 0.0, 'pm10': 0.0,
