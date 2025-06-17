@@ -48,8 +48,7 @@ class SensorDatabase:
                     is_default BOOLEAN DEFAULT 0,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    UNIQUE(address, communication_type),
-                    UNIQUE(name, communication_type, is_default)
+                    UNIQUE(address, communication_type)
                 )
             ''')
             
@@ -113,24 +112,32 @@ class SensorDatabase:
                     # 이미 존재하는 주소는 무시
                     pass
             
-            # 시리얼 센서들 삽입 (중복 체크 개선 - INSERT OR IGNORE 사용)
+            # 시리얼 센서들 삽입 (엄격한 중복 체크)
             for address, name, sensor_type, description, voltage, comm_type, port_info in serial_sensors:
                 try:
-                    # INSERT OR IGNORE를 사용하여 중복 방지
+                    # UART 센서의 경우 name과 communication_type으로 중복 체크
+                    if comm_type == 'UART':
+                        cursor.execute('''
+                            SELECT COUNT(*) FROM sensors 
+                            WHERE name = ? AND communication_type = ? AND is_default = 1
+                        ''', (name, comm_type))
+                        
+                        if cursor.fetchone()[0] > 0:
+                            print(f"ℹ️ 기본 센서 이미 존재: {name} ({comm_type})")
+                            continue
+                    
+                    # 센서 삽입
                     cursor.execute('''
-                        INSERT OR IGNORE INTO sensors 
+                        INSERT INTO sensors 
                         (address, name, type, description, voltage, communication_type, port_info, is_default)
                         VALUES (?, ?, ?, ?, ?, ?, ?, 1)
                     ''', (address, name, sensor_type, description, voltage, comm_type, port_info))
                     
-                    # 실제로 삽입되었는지 확인
-                    if cursor.rowcount > 0:
-                        print(f"✅ 기본 센서 추가: {name} ({comm_type})")
-                    else:
-                        print(f"ℹ️ 기본 센서 이미 존재: {name} ({comm_type})")
+                    print(f"✅ 기본 센서 추가: {name} ({comm_type})")
+                    
                 except sqlite3.IntegrityError as e:
-                    # 이미 존재하는 센서는 무시
-                    print(f"⚠️ 센서 추가 실패 (중복): {name} ({comm_type}) - {e}")
+                    # 이미 존재하는 센서는 무시 (주로 I2C 센서의 주소 중복)
+                    print(f"ℹ️ 센서 이미 존재 (무시): {name} ({comm_type})")
                     pass
             
             # 기존 I2C 센서 중 기본 센서로 업데이트해야 할 항목들
