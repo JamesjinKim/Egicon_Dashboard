@@ -7,7 +7,6 @@ Sensirion SDP810 differential pressure sensor driver
 import time
 import smbus2
 
-
 class SDP810Sensor:
     """SDP810 차압센서 클래스 (simpleEddy.py 방식)"""
     

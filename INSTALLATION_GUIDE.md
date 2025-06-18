@@ -1,8 +1,8 @@
-# EG-Dash 실제 센서 연동 설치 가이드
+# EG-Dash 실시간 센서 대시보드 설치 가이드
 
 ## 🎯 개요
 
-이 가이드는 EZ-Dash 시스템을 라즈베리파이 4에서 실제 센서(BME688 + BH1750)와 연동하여 실행하는 방법을 설명합니다.
+이 가이드는 EG-Dash 시스템을 라즈베리파이 4에서 실제 센서(BME688, BH1750, SHT40, SDP810, SPS30 등)와 연동하여 실행하는 방법을 설명합니다.
 
 ## 📋 필요한 하드웨어
 
@@ -12,16 +12,26 @@
 - 전원 어댑터 (5V 3A)
 
 ### 2. 센서 모듈
-- **BME688**: 온도, 습도, 압력, 가스 센서 (I2C: 0x77)
-- **BH1750**: 조도 센서 (I2C: 0x23)
+- **BME688**: 온도, 습도, 압력, 가스 센서 (I2C: 0x76/0x77)
+- **BH1750**: 조도 센서 (I2C: 0x23/0x5C)
+- **SHT40**: 온도, 습도 센서 (I2C: 0x44)
+- **SDP810**: 차압 센서 (I2C: 0x25)
+- **SPS30**: 미세먼지 센서 (I2C: 0x69)
 
 ### 3. 연결
 ```
-라즈베리파이 4     BME688        BH1750
-GPIO 2 (SDA)   →   SDA       →   SDA
-GPIO 3 (SCL)   →   SCL       →   SCL  
-3.3V           →   VCC       →   VCC
-GND            →   GND       →   GND
+라즈베리파이 4     모든 센서 (I2C 버스 공유)
+GPIO 2 (SDA)   →   SDA (모든 센서)
+GPIO 3 (SCL)   →   SCL (모든 센서)
+3.3V           →   VCC (모든 센서)
+GND            →   GND (모든 센서)
+
+센서별 I2C 주소:
+- BME688: 0x76 또는 0x77
+- BH1750: 0x23 또는 0x5C  
+- SHT40: 0x44
+- SDP810: 0x25
+- SPS30: 0x69
 ```
 
 ## 🔧 라즈베리파이 설정
@@ -71,66 +81,68 @@ i2cdetect -y 1
 
 ### 1. Python 패키지 설치
 ```bash
-cd /Users/kimkookjin/Projects/egicon/ezdash/
-pip3 install flask flask-cors smbus2
+cd /Users/kimkookjin/Projects/egicon/egdash/
+pip3 install flask flask-cors smbus2 sqlite3
 ```
 
-### 2. 센서 테스트
+### 2. I2C 스캐닝 및 센서 확인
 ```bash
-python3 test_sensors.py
+# I2C 디바이스 스캔
+i2cdetect -y 1
+
+# 개별 센서 테스트 (Python 인터프리터에서)
+python3 -c "from sensor_manager import SensorManager; sm = SensorManager(); sm.initialize_sensors(); print(sm.get_sensor_status())"
 ```
 
-이 명령으로 다음을 확인할 수 있습니다:
-- 시스템 요구사항
-- 개별 센서 연결 상태
-- 센서 매니저 통합 기능
-- API 기능
-
-### 3. 데이터베이스 초기화
+### 3. 데이터베이스 확인
 ```bash
-python3 sensor_data_generator.py
+# 데이터베이스는 자동으로 생성됩니다
+ls -la sensors.db
+
+# 필요시 데이터베이스 마이그레이션
+python3 migrate_database.py
 ```
 
 ## 🚀 시스템 실행
 
 ### 1. API 서버 시작
 ```bash
-python3 sensor_api.py
+python3 sensor_api_simple.py
 ```
 
 서버가 정상적으로 시작되면 다음과 같은 메시지가 표시됩니다:
 ```
-=============================================================
-EG-Dash 센서 대시보드 API 서버 시작
-=============================================================
+=== EG-Dash 심플 센서 API 서버 시작 ===
 
-실제 센서 연결 시도 중...
-BME688 센서 연결 성공 (칩 ID: 0x61)
-BME688 초기화 완료
-BH1750 조도센서 연결 성공 (주소: 0x23)
+센서 매니저 초기화 중...
+센서 상태 확인 중...
+- BME688: 연결됨 (I2C 버스 1, 주소 0x77)
+- BH1750: 연결됨 (I2C 버스 1, 주소 0x23)
+- SHT40: 연결됨 (I2C 버스 1, 주소 0x44)
+- SDP810: 연결됨 (I2C 버스 1, 주소 0x25)
+- SPS30: 연결됨 (I2C 버스 1, 주소 0x69)
 
-센서 초기화 완료: 2/2개 센서 연결
-SUCCESS: 모든 센서 정상 연결됨.
-
-Flask 서버 시작... (포트 5001)
-대시보드 접속: http://localhost:5001
-Ctrl+C로 종료
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5003
+ * Running on http://[라즈베리파이IP]:5003
 ```
 
 ### 2. 웹 대시보드 접속
 브라우저에서 다음 주소로 접속:
-- **로컬**: `http://localhost:5001`
-- **네트워크**: `http://[라즈베리파이IP]:5001`
+- **로컬**: `http://localhost:5003`
+- **네트워크**: `http://[라즈베리파이IP]:5003`
+- **대시보드**: `http://[라즈베리파이IP]:5003/dashboard`
+- **설정**: `http://[라즈베리파이IP]:5003/settings`
 
 ## 📊 대시보드 기능
 
 ### 센서 위젯 (6개)
-1. **온도** (BME688): °C
-2. **습도** (BME688): %
+1. **온도** (BME688/SHT40): °C
+2. **습도** (BME688/SHT40): %
 3. **조도** (BH1750): lux
-4. **차압** (BME688 압력 변환): Pa
-5. **진동** (가상): g
-6. **공기질** (BME688 가스저항 변환): /100
+4. **차압** (SDP810): Pa
+5. **미세먼지** (SPS30): μg/m³
+6. **공기질** (BME688 가스저항 기반): 점수
 
 ### 차트
 - 개별 센서 히스토리 차트
@@ -138,9 +150,10 @@ Ctrl+C로 종료
 - 3초마다 자동 업데이트
 
 ### API 엔드포인트
-- `/api/sensor-data`: 기본 센서 데이터
-- `/api/extended-data`: 가스/공기질 데이터
-- `/api/sensor-status`: 센서 연결 상태
+- `/api/current`: 현재 센서 데이터
+- `/api/status`: 센서 연결 상태
+- `/api/database`: 데이터베이스 기록 조회
+- `/settings`: 센서 설정 및 테스트 페이지
 
 ## ⚠️ 문제 해결
 
@@ -157,8 +170,8 @@ sudo systemctl restart i2c
 ```
 
 ### 2. 더미 데이터만 표시됨
-- 센서 연결 확인
-- `test_sensors.py` 실행하여 개별 센서 테스트
+- I2C 디바이스 스캔: `i2cdetect -y 1`
+- 센서 연결 확인: Settings 페이지에서 센서 테스트
 - 서버 로그에서 에러 메시지 확인
 
 ### 3. 웹페이지 접속 안됨
@@ -167,34 +180,36 @@ sudo systemctl restart i2c
 sudo ufw status
 
 # 포트 개방
-sudo ufw allow 5001
+sudo ufw allow 5003
 
 # 서버 실행 확인
-ps aux | grep sensor_api
+ps aux | grep sensor_api_simple
 ```
 
 ### 4. 센서 데이터 부정확
-- BME688 온도 오프셋 조정: `sensor_manager.py`에서 `temp_offset` 값 변경
+- 각 센서별 캘리브레이션 확인
+- Settings 페이지에서 센서 개별 테스트
 - 센서 안정화 시간 대기 (약 1-2분)
+- SPS30 센서는 초기 동작 시 워밍업 필요
 
 ## 🔄 자동 시작 설정 (선택사항)
 
 ### systemd 서비스 생성
 ```bash
-sudo nano /etc/systemd/system/ezdash.service
+sudo nano /etc/systemd/system/egdash.service
 ```
 
 파일 내용:
 ```ini
 [Unit]
-Description=EZ-Dash Sensor Dashboard
+Description=EG-Dash Sensor Dashboard
 After=network.target
 
 [Service]
 Type=simple
 User=pi
-WorkingDirectory=/Users/kimkookjin/Projects/egicon/ezdash
-ExecStart=/usr/bin/python3 sensor_api.py
+WorkingDirectory=/home/pi/egdash
+ExecStart=/usr/bin/python3 sensor_api_simple.py
 Restart=always
 RestartSec=5
 
@@ -204,9 +219,9 @@ WantedBy=multi-user.target
 
 서비스 활성화:
 ```bash
-sudo systemctl enable ezdash.service
-sudo systemctl start ezdash.service
-sudo systemctl status ezdash.service
+sudo systemctl enable egdash.service
+sudo systemctl start egdash.service
+sudo systemctl status egdash.service
 ```
 
 ## 📈 성능 최적화
@@ -225,16 +240,18 @@ setInterval(updateSensorData, 3000);  // 3초 → 5초 등으로 변경
 ## 🆘 지원
 
 문제가 발생하면 다음을 확인하세요:
-1. `test_sensors.py` 실행 결과
-2. I2C 센서 스캔 결과
+1. I2C 센서 스캔: `i2cdetect -y 1`
+2. Settings 페이지에서 센서 개별 테스트
 3. 서버 로그 메시지
 4. 하드웨어 연결 상태
+5. 데이터베이스 상태: `ls -la sensors*.db`
 
 ---
 
 ✅ **설치 완료 후 다음을 확인하세요:**
 - [ ] 센서 연결 정상 (`i2cdetect -y 1`)
-- [ ] 테스트 스크립트 통과 (`python3 test_sensors.py`)
-- [ ] API 서버 정상 실행 (`python3 sensor_api.py`)
-- [ ] 웹 대시보드 접속 가능 (`http://라즈베리파이IP:5001`)
+- [ ] API 서버 정상 실행 (`python3 sensor_api_simple.py`)
+- [ ] 웹 대시보드 접속 가능 (`http://라즈베리파이IP:5003`)
+- [ ] Settings 페이지에서 센서 테스트 통과
 - [ ] 실제 센서 데이터 표시 확인
+- [ ] 데이터베이스 정상 동작 확인

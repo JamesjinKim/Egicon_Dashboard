@@ -29,11 +29,31 @@
     --sensor-virtual: #6c757d;
 }
 
+/* 라즈베리파이 최적화: 선택적 폰트 로딩 */
+@font-face {
+    font-family: 'Noto Sans Lite';
+    src: url('../fonts/NotoSans-Regular.woff2') format('woff2');
+    font-weight: 100 900;
+    font-style: normal;
+    font-display: swap;
+}
+
+/* 한글 폰트는 Google Fonts에서만 로드 (로컬 파일 제거로 10MB 절약) */
+
+/* Google Fonts - 고품질 온라인 폰트 */
+@media (prefers-reduced-data: no-preference) {
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&family=Noto+Sans:wght@400;500;600;700&display=swap');
+}
+
 * {
     margin: 0;
     padding: 0;
     box-sizing: border-box;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    /* 라즈베리파이 최적화: 경량 영문폰트 + 시스템 한글폰트 */
+    font-family: 'Noto Sans Lite', 'Noto Sans', 'Noto Sans KR',
+                 'DejaVu Sans', 'Liberation Sans', 'Droid Sans', 'Ubuntu', 
+                 'Malgun Gothic', 'Apple SD Gothic Neo', 'Helvetica Neue', Arial, sans-serif;
+    font-display: swap;
 }
 
 body {
@@ -41,6 +61,9 @@ body {
     background-color: var(--background-color);
     color: var(--text-color);
     overflow-x: hidden;
+    font-weight: 400;
+    line-height: 1.6;
+    letter-spacing: -0.025em;
 }
 
 /* 사이드바 스타일 */
@@ -71,6 +94,9 @@ body {
     display: none;
     margin-left: 15px;
     white-space: nowrap;
+    font-weight: 700;
+    font-size: 1.1rem;
+    letter-spacing: -0.02em;
 }
 
 .sidebar.expanded .sidebar-header h2 {
@@ -160,12 +186,15 @@ body {
 }
 
 .user-info .user-name {
-    font-weight: bold;
+    font-weight: 600;
+    letter-spacing: -0.01em;
 }
 
 .user-info .user-role {
     font-size: 0.8rem;
     color: #777;
+    font-weight: 400;
+    letter-spacing: 0.01em;
 }
 
 .dashboard-container {
@@ -196,8 +225,9 @@ body {
 
 .card-title {
     font-size: 1.1rem;
-    font-weight: bold;
+    font-weight: 600;
     color: var(--secondary-color);
+    letter-spacing: -0.02em;
 }
 
 .card-icon {
@@ -213,8 +243,9 @@ body {
 
 .sensor-value {
     font-size: 1.8rem;
-    font-weight: bold;
+    font-weight: 700;
     margin: 10px 0;
+    letter-spacing: -0.03em;
 }
 
 .sensor-unit {
@@ -281,18 +312,20 @@ body {
 
 .widget-title {
     color: #777;
-    font-size: 14px;
-    font-weight: 500;
+    font-size: 13px;
+    font-weight: 600;
     text-transform: uppercase;
+    letter-spacing: 0.05em;
     margin-top: 25px;
     margin-left: 45px;
 }
 
 .widget-value {
     font-size: 28px;
-    font-weight: bold;
+    font-weight: 700;
     margin-top: 5px;
     padding-left: 45px;
+    letter-spacing: -0.03em;
 }
 
 .widget-unit {
@@ -506,11 +539,16 @@ body {
     color: var(--secondary-color);
     margin-bottom: 10px;
     font-size: 2.2em;
+    font-weight: 700;
+    letter-spacing: -0.03em;
 }
 
 .settings-header p {
     color: #666;
     font-size: 1.1em;
+    font-weight: 400;
+    line-height: 1.5;
+    letter-spacing: -0.01em;
 }
 
 /* 카드 스타일 */
@@ -533,10 +571,11 @@ body {
 
 .settings-container .card-title {
     font-size: 1.3em;
-    font-weight: 600;
+    font-weight: 700;
     display: flex;
     align-items: center;
     gap: 10px;
+    letter-spacing: -0.02em;
 }
 
 /* 버튼 스타일 */
@@ -546,6 +585,8 @@ body {
     border-radius: 6px;
     cursor: pointer;
     font-weight: 600;
+    font-size: 0.9rem;
+    letter-spacing: -0.01em;
     transition: all 0.3s ease;
     display: flex;
     align-items: center;
@@ -622,6 +663,8 @@ body {
     text-align: center;
     font-weight: 600;
     color: var(--secondary-color);
+    font-size: 0.95rem;
+    letter-spacing: -0.01em;
 }
 
 /* 테이블 스타일 */
@@ -641,6 +684,8 @@ body {
     padding: 12px;
     text-align: left;
     font-weight: 600;
+    font-size: 0.9rem;
+    letter-spacing: -0.01em;
     border-bottom: 2px solid var(--border-color);
     color: var(--secondary-color);
 }
@@ -659,8 +704,9 @@ body {
 .status-badge {
     padding: 4px 12px;
     border-radius: 20px;
-    font-size: 0.85em;
+    font-size: 0.8rem;
     font-weight: 600;
+    letter-spacing: 0.01em;
     text-align: center;
     min-width: 80px;
     display: inline-block;
@@ -715,8 +761,9 @@ body {
 .stat-value {
     display: block;
     font-size: 1.8em;
-    font-weight: bold;
+    font-weight: 700;
     color: var(--secondary-color);
+    letter-spacing: -0.02em;
 }
 
 .stat-value.connected {
@@ -747,6 +794,8 @@ body {
     margin-bottom: 8px;
     font-weight: 600;
     color: var(--secondary-color);
+    font-size: 0.9rem;
+    letter-spacing: -0.01em;
 }
 
 .form-group input, .form-group select, .form-group textarea {
@@ -754,7 +803,10 @@ body {
     padding: 12px;
     border: 2px solid var(--border-color);
     border-radius: 6px;
-    font-size: 1em;
+    font-size: 0.95rem;
+    font-weight: 400;
+    letter-spacing: -0.01em;
+    font-family: inherit;
     transition: border-color 0.3s ease;
 }
 
@@ -858,6 +910,8 @@ body {
     display: flex;
     align-items: center;
     gap: 10px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
 }
 
 .close {
@@ -1128,7 +1182,8 @@ body {
     color: var(--secondary-color);
     margin-bottom: 10px;
     text-align: center;
-    font-size: 0.9em;
+    font-size: 0.9rem;
+    letter-spacing: -0.01em;
 }
 
 .chart-card .chart-container {

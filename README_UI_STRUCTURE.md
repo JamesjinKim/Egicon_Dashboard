@@ -1,4 +1,4 @@
-# EZ-Dash UI 구조 및 확장 가이드
+# EG-Dash UI 구조 및 확장 가이드
 
 ## 📁 폴더 구조
 
@@ -7,8 +7,8 @@
 
   egdash/
   ├── 📱 메인 애플리케이션
-  │   ├── sensor_api_simple.py      # Flask 웹 서버
-  │   └── sensor_manager.py         # 센서 관리자 (리팩토링됨)
+  │   ├── sensor_api_simple.py      # Flask 웹 서버 (포트 5003)
+  │   └── sensor_manager.py         # 센서 관리자 (모든 센서 통합)
   │
   ├── 🔧 센서 클래스들 (모듈화)
   │   ├── bme688_sensor.py          # BME688 환경센서
@@ -19,17 +19,29 @@
   │
   ├── 🛠️ 지원 모듈들
   │   ├── constants.py              # BME688 상수
-  │   ├── database.py               # 센서 DB 관리
-  │   └── i2c_scanner.py            # I2C 스캐너
+  │   ├── database.py               # SQLite 데이터베이스 관리
+  │   ├── migrate_database.py       # 데이터베이스 마이그레이션
+  │   ├── i2c_scanner.py            # I2C 스캐너
+  │   └── sensors.db                # SQLite DB 파일
   │
   ├── 🌐 웹 인터페이스
   │   ├── templates/                # HTML 템플릿
+  │   │   ├── base.html             # 기본 템플릿
+  │   │   ├── index.html            # 메인 페이지
+  │   │   └── pages/
+  │   │       ├── dashboard.html    # 대시보드
+  │   │       └── settings.html     # 센서 설정
   │   └── static/                   # CSS, JS 파일
+  │       ├── css/styles.css        # 메인 스타일
+  │       └── js/
+  │           ├── script.js         # 대시보드 JS
+  │           └── settings.js       # 설정 JS
   │
   ├── 📚 문서들
   │   ├── README.md
   │   ├── INSTALLATION_GUIDE.md
-  │   └── README_UI_STRUCTURE.md
+  │   ├── README_UI_STRUCTURE.md
+  │   └── Documents/prd.txt
   │
   └── 🗂️ 백업
       └── backup_deprecated/        # 사용하지 않는 파일들
@@ -134,30 +146,30 @@ static/css/
 ### 1. 기능별 JS 파일 분리
 ```
 static/js/
-├── script.js           # 메인 JavaScript
-├── dashboard.js        # 대시보드 전용 기능
+├── script.js           # 메인 JavaScript (대시보드 전용)
 ├── settings.js         # 설정 페이지 전용 기능
-├── api.js             # API 통신 관련
-└── components/        # 컴포넌트별 JavaScript
+└── components/        # 컴포넌트별 JavaScript (미래 확장용)
     └── chart.js
 ```
 
 ### 2. 모듈 사용 예시
 ```javascript
-// static/js/api.js
-const API = {
-    BASE_URL: window.location.origin + '/api',
-    
-    async getCurrentData() {
-        const response = await fetch(`${this.BASE_URL}/current`);
-        return response.json();
-    },
-    
-    async getSensorStatus() {
-        const response = await fetch(`${this.BASE_URL}/status`);
-        return response.json();
+// static/js/script.js에 이미 구현된 API 통신 예시
+const API_BASE = window.location.origin;
+
+async function updateSensorData() {
+    try {
+        const response = await fetch(`${API_BASE}/api/current`);
+        const data = await response.json();
+        updateWidgets(data);
+        updateCharts(data);
+    } catch (error) {
+        console.error('센서 데이터 업데이트 오류:', error);
     }
-};
+}
+
+// 3초마다 자동 업데이트
+setInterval(updateSensorData, 3000);
 ```
 
 ## 🔧 Flask 앱 확장
